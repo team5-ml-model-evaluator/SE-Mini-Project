@@ -168,3 +168,14 @@ code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .auth-card { max-width: 26rem; margin: 3rem auto; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 .page { max-width: 62rem; }
+
+/* Run status and results (issue #19) */
+.run-state { display: inline-flex; align-items: center; gap: .6rem; margin: 0 0 .5rem; padding: .35rem .9rem .35rem .5rem; border-radius: 999px; font-weight: 600; font-size: 1.1rem; border: 2px solid var(--slate); background: var(--txt-bg); color: var(--txt-fg); }
+.run-state__glyph { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--surface); border: 2px solid currentColor; font-size: .75rem; }
+.run-state--running { background: color-mix(in srgb, var(--amber) 28%, var(--surface)); color: var(--ink); border-color: var(--ink); }
+.run-state--completed { background: var(--ok-bg); color: var(--ok-fg); border-color: var(--ok-fg); }
+.run-state--failed { background: var(--err-bg); color: var(--err-fg); border-color: var(--err-fg); }
+.alert-info { background: var(--int-bg); border-color: var(--int-fg); color: var(--int-fg); }
+.alert-info .h6::before { content: "\2139\00a0"; }
+.num { font-family: "IBM Plex Mono", monospace; text-align: right; font-variant-numeric: tabular-nums; }
+.matrix td.matrix__hit { font-weight: 600; background: color-mix(in srgb, var(--int-fg) 10%, transparent); }

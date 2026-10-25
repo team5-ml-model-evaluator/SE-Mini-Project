@@ -3,11 +3,14 @@ import os
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_GET, require_POST
 
 from .forms import ModelForm, PipelineForm, UploadForm, error_summary
-from .models import Dataset
+from .models import Dataset, Run
 from .stages import stage_list
+from .standins import runs
 from .standins.catalogue import BY_KEY
 
 
@@ -112,3 +115,83 @@ def settings_summary(request, pk):
     return _page(
         request, "summary.html", "model", dataset=dataset, draft=draft, algorithm=BY_KEY[draft["algorithm"]]
     )
+
+
+def _run_config(dataset, draft):
+    """The run_config of SAD interface 2. Preprocessing settings are not collected yet, so they stay empty."""
+    return {
+        "dataset_id": str(dataset.id),
+        "target_column": draft["target_column"],
+        "feature_columns": draft["feature_columns"],
+        "imputation": None,
+        "encoding": None,
+        "scaling": None,
+        "split_ratio": 0.8,
+        "random_seed": 42,
+        "algorithm": draft["algorithm"],
+        "hyperparameters": {},
+    }
+
+
+@login_required
+@require_POST
+def start_run(request, pk):
+    """Start a run from the saved settings and return to the user straight away (MLE-F-040)."""
+    dataset = _owned_dataset(request, pk)
+    draft = request.session.get(_draft_key(dataset))
+    if not draft or "algorithm" not in draft:
+        messages.error(request, "Choose an algorithm before starting a run.")
+        return redirect("model_step", pk=dataset.id)
+    job_key = runs.start(request.user, dataset, _run_config(dataset, draft))
+    return redirect("run_detail", job_key=job_key)
+
+
+def _owned_run(request, job_key):
+    run = get_object_or_404(Run, job_key=job_key)
+    if run.owner_id != request.user.id:
+        raise PermissionDenied
+    return run
+
+
+def _clock(seconds):
+    """Elapsed time as mm:ss, the same format run.js uses while the page is live."""
+    if seconds is None:
+        return "00:00"
+    seconds = int(seconds)
+    return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+
+@login_required
+@require_GET
+def run_detail(request, job_key):
+    run = _owned_run(request, job_key)
+    status = runs.get_status(run)
+    run.refresh_from_db()
+    stage = "results" if run.state == Run.COMPLETED else "run"
+    result = run.result or {}
+    labels = result.get("labels") or []
+    matrix = []
+    for i, row in enumerate(result.get("confusion_matrix") or []):
+        matrix.append({"label": labels[i] if i < len(labels) else str(i), "cells": [
+            {"value": value, "correct": j == i} for j, value in enumerate(row)]})
+    return _page(
+        request, "run.html", stage, run=run, status=status, clock=_clock(status["elapsed_s"]),
+        result=result, matrix=matrix, labels=labels,
+        algorithm=BY_KEY[run.run_config["algorithm"]],
+        active=run.state in (Run.QUEUED, Run.RUNNING),
+    )
+
+
+@require_GET
+def run_status(request, job_key):
+    """GET /api/runs/<job_key>/status (SAD interface 1). 401 signed out, 403 someone else's run, 404 unknown."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Sign in to see this run."}, status=401)
+    run = Run.objects.filter(job_key=job_key).first()
+    if run is None:
+        return JsonResponse({"error": "There is no run with this key."}, status=404)
+    if run.owner_id != request.user.id:
+        return JsonResponse({"error": "This run belongs to another user."}, status=403)
+    response = JsonResponse(runs.get_status(run))
+    response["Cache-Control"] = "no-store"
+    return response
