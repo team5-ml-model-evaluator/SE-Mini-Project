@@ -1,0 +1,44 @@
+
+name: Python CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Install dependencies and run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          else
+            echo "requirements.txt not present yet; skipping project dependencies."
+          fi
+          python -m pip install pytest
+
+      - name: Run tests
+        run: |
+          if [ -d tests ] && find tests -type f -name "test_*.py" -print -quit | grep -q .; then
+            python -m pytest -q
+          else
+            echo "No Python test files found yet; skipping pytest."
+          fi
