@@ -1,9 +1,10 @@
 """CSV upload validation for the Data Pipeline (MLE-F-010, MLE-F-011).
 
-This is the real implementation behind the WebUI's dataset stand-in: the WebUI
-only calls ``validate_csv`` and must keep the returned shape and the rejection
-messages unchanged (PR #27). Structural checks run on the raw text so a
-malformed file is never persisted; a valid file returns its profile.
+This is the real implementation behind the WebUI's dataset stand-in: the
+WebUI only calls ``validate_csv`` and must keep the returned shape and the
+rejection messages unchanged (PR #27). The structural checks run on the raw
+text so a malformed file never reaches profiling; the profile itself is
+produced by :func:`datasets.profiling.profile_text`.
 """
 import csv
 import io
@@ -11,41 +12,11 @@ import io
 from django.conf import settings
 
 from .exceptions import DatasetRejected
+from .profiling import profile_text
 
 MIN_ROWS = 20
 MIN_COLUMNS = 2
 MISSING_TOKENS = {"", "na", "n/a", "nan", "null", "none"}
-
-
-def _dtype(values):
-    """integer if every present value parses as int, else decimal if float, else text."""
-    present = [v for v in values if v.strip().lower() not in MISSING_TOKENS]
-    if not present:
-        return "text"
-    for caster, label in ((int, "integer"), (float, "decimal")):
-        try:
-            for value in present:
-                caster(value)
-            return label
-        except ValueError:
-            continue
-    return "text"
-
-
-def _profile(header, body):
-    columns = []
-    for index, column in enumerate(header):
-        values = [row[index] for row in body]
-        missing = sum(1 for v in values if v.strip().lower() in MISSING_TOKENS)
-        columns.append(
-            {
-                "name": column,
-                "dtype": _dtype(values),
-                "missing_count": missing,
-                "missing_pct": round(100 * missing / len(body), 1),
-            }
-        )
-    return {"rows": len(body), "column_count": len(header), "columns": columns}
 
 
 def validate_csv(uploaded):
@@ -99,4 +70,4 @@ def validate_csv(uploaded):
             f"The file has {len(body)} data rows. At least {MIN_ROWS} are needed to train and test a model."
         )
 
-    return _profile(header, body)
+    return profile_text(text)
