@@ -1,0 +1,91 @@
+{% extends "webui/base.html" %}
+{% load static %}
+{% block title %}Run {{ run.job_key }}{% endblock %}
+{% block head %}{% if active %}<noscript><meta http-equiv="refresh" content="5"></noscript>
+<script src="{% static 'webui/run.js' %}" defer></script>{% endif %}{% endblock %}
+{% block content %}
+<h1>Training run</h1>
+<p class="lede">{{ algorithm.label }} ({{ algorithm.task }}) on {{ run.dataset.original_name }}, predicting <strong class="mono">{{ run.run_config.target_column }}</strong>. Run key <span class="mono">{{ run.job_key }}</span>.</p>
+
+<section class="panel" aria-labelledby="state-title">
+  <h2 id="state-title" class="h5">Status</h2>
+  <div id="run-live" data-active="{{ active|yesno:'true,false' }}" data-state="{{ status.state }}" data-elapsed="{{ status.elapsed_s|default_if_none:'' }}" data-status-url="{% url 'run_status' run.job_key %}">
+    <p class="run-state run-state--{{ status.state|lower }}" role="status" aria-live="polite">
+      <span class="run-state__glyph" id="state-glyph" aria-hidden="true">{% if status.state == "Queued" %}&#9719;{% elif status.state == "Running" %}&#9654;{% elif status.state == "Completed" %}&#10003;{% else %}&#10005;{% endif %}</span>
+      <span id="state-text">{{ status.state }}</span>
+    </p>
+    <p class="mb-0" id="elapsed">{% if status.state == "Queued" %}Waiting for a free worker. This page updates by itself.{% elif status.state == "Running" %}Running for {{ clock }}. This page updates by itself.{% elif status.state == "Completed" %}Finished in {{ clock }}.{% else %}Stopped after {{ clock }}.{% endif %}</p>
+    <p class="mb-0 mt-2 text-danger fw-semibold" id="refresh-note" hidden>Could not refresh just now. Trying again.</p>
+  </div>
+</section>
+
+{% if run.state == "Failed" %}
+<div class="alert alert-danger" role="alert">
+  <h2 class="h6">The run failed</h2>
+  <p class="mb-2">{{ run.error }}</p>
+  <a href="{% url 'settings_summary' run.dataset.id %}">Change the settings and try again</a>
+</div>
+{% endif %}
+
+{% if run.state == "Completed" %}
+{% if result.standin %}
+<div class="alert alert-info" role="note">
+  <h2 class="h6">Placeholder results</h2>
+  <p class="mb-0">The training worker is not connected yet. These numbers come from a simple baseline ({% if result.task == "classification" %}always predicting the most frequent class{% else %}always predicting the training mean{% endif %}) on {{ result.test_rows }} held-out rows, not from {{ algorithm.label }}.</p>
+</div>
+{% endif %}
+
+{% if result.task == "classification" %}
+<section class="panel" aria-labelledby="metrics-title">
+  <h2 id="metrics-title" class="h5">Classification metrics</h2>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Classification metrics, scrollable">
+  <table class="table">
+    <caption>Precision, recall and F1-score are averaged over the classes, weighted by how many rows each class has.</caption>
+    <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Accuracy</th><td class="num">{{ result.accuracy|floatformat:4 }}</td></tr>
+      <tr><th scope="row">Precision</th><td class="num">{{ result.precision|floatformat:4 }}</td></tr>
+      <tr><th scope="row">Recall</th><td class="num">{{ result.recall|floatformat:4 }}</td></tr>
+      <tr><th scope="row">F1-score</th><td class="num">{{ result.f1_score|floatformat:4 }}</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+<section class="panel" aria-labelledby="matrix-title">
+  <h2 id="matrix-title" class="h5">Confusion matrix</h2>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Confusion matrix, scrollable">
+  <table class="table matrix">
+    <caption>Rows are the actual class, columns are the predicted class. Cells marked with a tick are correct predictions.</caption>
+    <thead>
+      <tr><td></td><th scope="colgroup" colspan="{{ labels|length }}" class="text-center">Predicted</th></tr>
+      <tr><th scope="col">Actual</th>{% for label in labels %}<th scope="col" class="num">{{ label }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for row in matrix %}
+      <tr><th scope="row">{{ row.label }}</th>{% for cell in row.cells %}<td class="num{% if cell.correct %} matrix__hit{% endif %}">{% if cell.correct %}<span aria-hidden="true">&#10003;&nbsp;</span><span class="visually-hidden">correct: </span>{% endif %}{{ cell.value }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% else %}
+<section class="panel" aria-labelledby="metrics-title">
+  <h2 id="metrics-title" class="h5">Regression metrics</h2>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Regression metrics, scrollable">
+  <table class="table">
+    <caption>Errors are in the units of the target column. Lower is better for MAE, MSE and RMSE; higher is better for R&sup2;.</caption>
+    <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">MAE (mean absolute error)</th><td class="num">{{ result.mae|floatformat:4 }}</td></tr>
+      <tr><th scope="row">MSE (mean squared error)</th><td class="num">{{ result.mse|floatformat:4 }}</td></tr>
+      <tr><th scope="row">RMSE (root mean squared error)</th><td class="num">{{ result.rmse|floatformat:4 }}</td></tr>
+      <tr><th scope="row">R&sup2; (coefficient of determination)</th><td class="num">{{ result.r2|floatformat:4 }}</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endif %}
+
+<a class="btn btn-outline-secondary" href="{% url 'dataset_list' %}">Back to datasets</a>
+{% endblock %}

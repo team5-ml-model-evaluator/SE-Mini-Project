@@ -73,3 +73,8 @@ LOGOUT_REDIRECT_URL = "login"
 
 # SRS MLE-F-010: uploads up to 50 MB.
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# STAND-IN run worker timing (webui/standins/runs.py). Replaced when RunsApp/TrainingWorker are merged.
+STANDIN_QUEUE_SECONDS = 2
+STANDIN_RUN_SECONDS = 8
+STANDIN_RUN_SYNC = False
