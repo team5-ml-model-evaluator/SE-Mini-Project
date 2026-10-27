@@ -1,18 +1,31 @@
-"""Django settings for the Web Based ML Model Evaluator (development defaults)."""
+
+"""Django settings for the Web Based ML Model Evaluator."""
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
     if not DEBUG:
-        raise RuntimeError("Set DJANGO_SECRET_KEY when DJANGO_DEBUG is not 1.")
+        raise RuntimeError(
+            "Set DJANGO_SECRET_KEY when DJANGO_DEBUG is not 1."
+        )
     SECRET_KEY = "dev-only-not-a-secret"
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,testserver",
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -32,12 +45,11 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-WSGI_APPLICATION = "config.wsgi.application"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -49,32 +61,56 @@ TEMPLATES = [
     },
 ]
 
-# SQLite in development; the SAD allows PostgreSQL later through the same ORM.
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+WSGI_APPLICATION = "config.wsgi.application"
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "MinimumLengthValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+        ),
+    },
 ]
 
-LANGUAGE_CODE = "en"
+LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
-USE_I18N = False
+USE_I18N = True
 USE_TZ = True
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 STATIC_URL = "static/"
-# Uploaded datasets live outside any served path (SAD: per-user directory on the file system).
-MEDIA_ROOT = BASE_DIR / "var" / "uploads"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "dataset_list"
+LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
-# SRS MLE-F-010: uploads up to 50 MB.
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-
-# STAND-IN run worker timing (webui/standins/runs.py). Replaced when RunsApp/TrainingWorker are merged.
-STANDIN_QUEUE_SECONDS = 2
-STANDIN_RUN_SECONDS = 8
-STANDIN_RUN_SYNC = False
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+X_FRAME_OPTIONS = "DENY"

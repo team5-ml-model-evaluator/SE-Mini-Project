@@ -1,9 +1,31 @@
+from django.contrib import admin
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
 from django.urls import include, path
 
+from .views import admin_dashboard, register
+
+
+@login_required
+def dashboard(request):
+    return HttpResponse(
+        "You are logged in. The ML Model Evaluator dashboard is being built."
+    )
+
+
 urlpatterns = [
-    # STAND-IN: login/logout until AccountsApp (MLE-F-001..003) is merged.
-    path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
-    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("admin/", admin.site.urls),
+    path("register/", register, name="register"),
+    path(
+        "login/",
+        auth_views.LoginView.as_view(
+            template_name="registration/login.html"
+        ),
+        name="login",
+    ),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("admin-dashboard/", admin_dashboard, name="admin_dashboard"),
+    path("dashboard/", dashboard, name="dashboard"),
     path("", include("webui.urls")),
 ]

@@ -1,0 +1,39 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create Account | ML Model Evaluator</title>
+</head>
+<body>
+    <main>
+        <h1>Create an account</h1>
+        <p>Register to use the Web Based ML Model Evaluator.</p>
+
+        <form method="post">
+            {% csrf_token %}
+
+            {{ form.non_field_errors }}
+
+            {% for field in form %}
+                <p>
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <br>
+                        <span>{{ error }}</span>
+                    {% endfor %}
+                    {% if field.help_text %}
+                        <small>{{ field.help_text }}</small>
+                    {% endif %}
+                </p>
+            {% endfor %}
+
+            <button type="submit">Register</button>
+        </form>
+
+        <p>Already registered? <a href="{% url 'login' %}">Log in</a></p>
+    </main>
+</body>
+</html>
