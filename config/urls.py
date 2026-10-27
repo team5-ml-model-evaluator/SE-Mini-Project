@@ -1,4 +1,3 @@
-
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
@@ -27,6 +26,7 @@ urlpatterns = [
     ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("admin-dashboard/", admin_dashboard, name="admin_dashboard"),
+    path("dashboard/", dashboard, name="dashboard"),
     path("", include("jobs.urls")),
-    path("", dashboard, name="dashboard"),
+    path("", include("webui.urls")),
 ]

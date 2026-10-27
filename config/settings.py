@@ -1,19 +1,24 @@
-
-"""Django settings for the ML Model Evaluator."""
+"""Django settings for the Web Based ML Model Evaluator."""
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "development-only-key-replace-before-deployment",
-)
-DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise RuntimeError(
+            "Set DJANGO_SECRET_KEY when DJANGO_DEBUG is not 1."
+        )
+    SECRET_KEY = "dev-only-not-a-secret"
+
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get(
-        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,testserver",
     ).split(",")
     if host.strip()
 ]
@@ -25,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "webui",
     "jobs.apps.JobsConfig",
 ]
 
@@ -98,6 +104,8 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"

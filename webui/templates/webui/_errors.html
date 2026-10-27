@@ -1,0 +1,8 @@
+{% if errors %}
+<div id="error-summary" class="alert alert-danger" role="alert" tabindex="-1">
+  <h2 class="h6">There is a problem</h2>
+  <ul class="mb-0">
+    {% for anchor, message in errors %}<li>{% if anchor %}<a href="#{{ anchor }}">{{ message }}</a>{% else %}{{ message }}{% endif %}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}

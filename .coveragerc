@@ -1,0 +1,12 @@
+
+[run]
+branch = True
+omit =
+    */tests/*
+    */migrations/*
+    */venv/*
+    */.venv/*
+
+[report]
+show_missing = True
+skip_covered = True

@@ -41,7 +41,7 @@ def test_user_can_log_in(client):
     )
 
     assert response.status_code == 302
-    assert response.url == "/"
+    assert response.url == "/dashboard/"
 
 
 @pytest.mark.django_db
