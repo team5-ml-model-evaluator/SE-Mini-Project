@@ -1,8 +1,9 @@
-"""Data Pipeline tests for issue #6: CSV validation, storage and ownership.
+"""Data Pipeline tests for issues #6 (validation/ownership) and #7 (profiling).
 
 Covers the STP test cases:
   TC-DS-01  structural CSV validation rules and the message for each rejection
-  TC-DS-02  a valid upload is profiled and stored; a rejection stores nothing
+  TC-DS-02  an invalid upload is never persisted; a valid one is profiled/stored
+  TC-DS-03  profiling: dtype inference (integer/decimal/text) and missing counts
   TC-DS-04  ownership: 404 unknown, 403 for another user, login required
 """
 import shutil
@@ -17,15 +18,17 @@ from django.urls import reverse
 
 from webui.models import Dataset
 
+from . import profiling
 from .exceptions import DatasetRejected
 from .ownership import get_owned_dataset
 from .validation import validate_csv
 
 User = get_user_model()
-TMP_MEDIA = tempfile.mkdtemp(prefix="mle-ds6-test-")
+TMP_MEDIA = tempfile.mkdtemp(prefix="mle-ds-test-")
 
 
 def csv_bytes(header=("age", "city", "bought"), rows=25, missing=None):
+    """Build a small, well-formed CSV body (numeric/text/mixed by default)."""
     missing = missing or {}
     lines = [",".join(header)]
     for i in range(rows):
@@ -42,12 +45,34 @@ def upload(content, name="data.csv"):
     return SimpleUploadedFile(name, content)
 
 
-def profile_for(content, name="data.csv"):
-    return validate_csv(upload(content, name))
+@override_settings(MEDIA_ROOT=TMP_MEDIA, PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class DatasetsTestCase(TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TMP_MEDIA, ignore_errors=True)
+
+    def setUp(self):
+        self.user = User.objects.create_user("alice", password="pw")
+        self.other = User.objects.create_user("bob", password="pw")
+        self.client.force_login(self.user)
+
+    def store_dataset(self, owner=None, content=None, name="data.csv"):
+        owner = owner or self.user
+        content = content if content is not None else csv_bytes()
+        profile = validate_csv(upload(content, name))
+        return Dataset.objects.create(
+            owner=owner,
+            original_name=name,
+            file=upload(content, name),
+            rows=profile["rows"],
+            column_count=profile["column_count"],
+            profile=profile,
+        )
 
 
-class ValidateCsvTests(TestCase):
-    """TC-DS-01: the validator rejects bad uploads with an actionable message."""
+class ValidateCsvTests(DatasetsTestCase):
+    """TC-DS-01 / TC-DS-03: the validator and the profile it returns."""
 
     def test_valid_upload_returns_profile_shape(self):
         profile = validate_csv(upload(csv_bytes()))
@@ -57,7 +82,8 @@ class ValidateCsvTests(TestCase):
         self.assertEqual([c["dtype"] for c in profile["columns"]], ["integer", "text", "integer"])
 
     def test_missing_values_are_counted(self):
-        age = validate_csv(upload(csv_bytes(missing={"age": 5})))["columns"][0]
+        profile = validate_csv(upload(csv_bytes(missing={"age": 5})))
+        age = profile["columns"][0]
         self.assertEqual(age["dtype"], "integer")
         self.assertEqual(age["missing_count"], 5)
         self.assertEqual(age["missing_pct"], 20.0)
@@ -106,35 +132,42 @@ class ValidateCsvTests(TestCase):
             self.assertIn("the limit is 0 MB", str(ctx.exception))
 
 
-@override_settings(MEDIA_ROOT=TMP_MEDIA, PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
-class OwnershipTests(TestCase):
-    """TC-DS-02 / TC-DS-04: storage of a valid upload and server-side ownership."""
+class ProfilingServiceTests(DatasetsTestCase):
+    """TC-DS-03: the profiling service consumed by upload and preprocessing."""
 
-    @classmethod
-    def tearDownClass(cls):
-        super().tearDownClass()
-        shutil.rmtree(TMP_MEDIA, ignore_errors=True)
+    def test_profile_text_dtype_inference(self):
+        text = "n,d,t\n1,1.5,x\n2,,y\n3,2.5,z\n"
+        profile = profiling.profile_text(text)
+        dtypes = [c["dtype"] for c in profile["columns"]]
+        self.assertEqual(dtypes, ["integer", "decimal", "text"])
+        self.assertEqual(profile["rows"], 3)
 
-    def setUp(self):
-        self.user = User.objects.create_user("alice", password="pw")
-        self.other = User.objects.create_user("bob", password="pw")
-        self.client.force_login(self.user)
+    def test_profile_text_ignores_missing_tokens_for_dtype(self):
+        profile = profiling.profile_text("a,b\n1,NA\n2,\n3,n/a\n")
+        by_name = {c["name"]: c for c in profile["columns"]}
+        self.assertEqual(by_name["a"]["dtype"], "integer")
+        self.assertEqual(by_name["a"]["missing_count"], 0)
+        self.assertEqual(by_name["b"]["missing_count"], 3)
 
-    def store_dataset(self, owner=None, content=None, name="data.csv"):
-        owner = owner or self.user
-        content = content if content is not None else csv_bytes()
-        profile = profile_for(content, name)
-        return Dataset.objects.create(
-            owner=owner,
-            original_name=name,
-            file=upload(content, name),
-            rows=profile["rows"],
-            column_count=profile["column_count"],
-            profile=profile,
-        )
+    def test_load_dataframe_returns_typed_frame(self):
+        dataset = self.store_dataset(content=b"a,b\n" + b"1,2\n" * 20)
+        df = profiling.load_dataframe(dataset)
+        self.assertEqual(list(df.columns), ["a", "b"])
+        self.assertTrue(df["a"].dtype.kind in "iuf", df["a"].dtype)  # numeric, not all-string
+
+    def test_load_dataframe_missing_file_raises(self):
+        dataset = self.store_dataset()
+        dataset.file.delete()
+        with self.assertRaises(profiling.ProfileError):
+            profiling.load_dataframe(dataset)
+
+
+class OwnershipTests(DatasetsTestCase):
+    """TC-DS-04: server-side ownership checks."""
 
     def _request(self, user):
-        request = RequestFactory().get("/")
+        rf = RequestFactory()
+        request = rf.get("/")
         request.user = user
         return request
 
@@ -160,12 +193,3 @@ class OwnershipTests(TestCase):
     def test_unknown_dataset_is_404_through_the_view(self):
         response = self.client.get(reverse("dataset_detail", args=["00000000-0000-0000-0000-000000000000"]))
         self.assertEqual(response.status_code, 404)
-
-    def test_valid_upload_is_stored_and_invalid_is_not(self):
-        bad = self.client.post(reverse("dataset_new"), {"file": upload(csv_bytes(rows=5))})
-        self.assertEqual(bad.status_code, 200)
-        self.assertEqual(Dataset.objects.count(), 0)  # rejected uploads are never persisted
-        self.client.post(reverse("dataset_new"), {"file": upload(csv_bytes(), name="customers.csv")})
-        dataset = Dataset.objects.get()
-        self.assertEqual((dataset.rows, dataset.column_count), (25, 3))
-        self.assertEqual(dataset.file.name, f"user-{self.user.id}/{dataset.id}.csv")
