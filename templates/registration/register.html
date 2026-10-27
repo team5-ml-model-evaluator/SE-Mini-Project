@@ -1,39 +1,22 @@
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Create Account | ML Model Evaluator</title>
-</head>
-<body>
-    <main>
-        <h1>Create an account</h1>
-        <p>Register to use the Web Based ML Model Evaluator.</p>
-
-        <form method="post">
-            {% csrf_token %}
-
-            {{ form.non_field_errors }}
-
-            {% for field in form %}
-                <p>
-                    {{ field.label_tag }}
-                    {{ field }}
-                    {% for error in field.errors %}
-                        <br>
-                        <span>{{ error }}</span>
-                    {% endfor %}
-                    {% if field.help_text %}
-                        <small>{{ field.help_text }}</small>
-                    {% endif %}
-                </p>
-            {% endfor %}
-
-            <button type="submit">Register</button>
-        </form>
-
-        <p>Already registered? <a href="{% url 'login' %}">Log in</a></p>
-    </main>
-</body>
-</html>
+{% extends "webui/base.html" %}
+{% block title %}Create an account{% endblock %}
+{% block content %}
+<div class="auth-card">
+<h1>Create an account</h1>
+<p class="lede">Register to use the Web Based ML Model Evaluator.</p>
+<form method="post" novalidate class="panel">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    <input class="form-control{% if field.errors %} is-invalid{% endif %}" type="{{ field.field.widget.input_type }}" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{% if field.field.widget.input_type != 'password' %}{{ field.value|default_if_none:'' }}{% endif %}" autocomplete="{% if field.field.widget.input_type == 'password' %}new-password{% else %}username{% endif %}" required>
+    {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+    {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button type="submit" class="btn btn-primary w-100">Register</button>
+</form>
+<p class="mt-3">Already registered? <a href="{% url 'login' %}">Log in</a></p>
+</div>
+{% endblock %}

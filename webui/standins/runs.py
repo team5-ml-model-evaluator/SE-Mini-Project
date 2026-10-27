@@ -15,15 +15,26 @@ To swap: delete this file, point ``start`` and ``get_status`` in views.py at Run
 the result keys below (they match evaluation_metrics.py from issue #13).
 """
 import csv
+import io
+import logging
 import random
 import threading
 import time
 import uuid
 from collections import Counter
 
+logger = logging.getLogger(__name__)
+
+import pandas as pd
 from django.conf import settings
 from django.db import close_old_connections
 from django.utils import timezone
+
+from baseline_model import run_baseline
+from evaluation_metrics import (
+    calculate_classification_metrics,
+    calculate_regression_metrics,
+)
 
 from ..models import Run
 from .catalogue import BY_KEY
@@ -75,10 +86,11 @@ def _execute(job_key, queue_s, run_s):
         time.sleep(run_s)
         try:
             run.result = _train_and_score(run)
-            run.state = Run.COMPLETED
+            run.state, run.error = Run.COMPLETED, ""
         except RunFailed as exc:
             run.state, run.error = Run.FAILED, str(exc)
-        except Exception:  # noqa: BLE001  the worker must never take the web process down (MLE-NF-003)
+        except Exception as exc:  # noqa: BLE001  the worker must never take the web process down (MLE-NF-003)
+            logger.exception("Run %s failed unexpectedly: %s", job_key, exc)
             run.state, run.error = Run.FAILED, "The run stopped unexpectedly. Check the dataset and start it again."
         run.finished_at = timezone.now()
         run.save()
@@ -87,6 +99,148 @@ def _execute(job_key, queue_s, run_s):
 
 
 def _train_and_score(run):
+    if getattr(settings, "STANDIN_FORCE_BASELINE", False):
+        return _train_and_score_standin(run)
+
+    config = run.run_config
+    target = config["target_column"]
+    algorithm_key = config["algorithm"]
+    algorithm = BY_KEY.get(algorithm_key)
+    if not algorithm:
+        raise RunFailed(f"Unsupported algorithm '{algorithm_key}'.")
+
+    try:
+        with run.dataset.file.open("rb") as handle:
+            content = handle.read()
+    except FileNotFoundError:
+        raise RunFailed("The uploaded file for this dataset is missing on the server. Upload the CSV again.")
+    except Exception as exc:
+        logger.exception("Could not read dataset file for run %s: %s", run.job_key, exc)
+        raise RunFailed("Could not read the dataset file. Upload the CSV again.")
+
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise RunFailed(f"Could not parse CSV dataset: {exc}")
+
+    if target not in df.columns:
+        raise RunFailed(f"Column '{target}' was not found in the dataset.")
+
+    # Filter out missing/empty targets
+    df = df[df[target].notna()].copy()
+    if df[target].dtype == object:
+        df = df[df[target].astype(str).str.strip() != ""].copy()
+
+    if len(df) < 10:
+        raise RunFailed(f"Column '{target}' has too few filled-in values to split into training and test sets.")
+
+    feature_cols = [c for c in config.get("feature_columns", []) if c in df.columns and c != target]
+    if not feature_cols:
+        excluded = set(config.get("excluded_columns", [])) | {target}
+        feature_cols = [c for c in df.columns if c not in excluded]
+
+    if not feature_cols:
+        raise RunFailed("No feature columns available to train the model. Choose at least one feature.")
+
+    if algorithm.task == "classification":
+        unique_targets = df[target].unique()
+        if len(unique_targets) < 2:
+            raise RunFailed(f"Column '{target}' has only one value, so there is nothing to tell apart. Choose a different target.")
+    else:
+        try:
+            df[target] = pd.to_numeric(df[target], errors="raise")
+        except (ValueError, TypeError):
+            raise RunFailed(f"Column '{target}' is not numeric, but the chosen algorithm predicts numbers. Choose a numeric target or a classification algorithm.")
+
+    random_seed = int(config.get("random_seed", 42))
+    split_ratio = float(config.get("split_ratio", 0.8))
+    order = list(range(len(df)))
+    random.Random(random_seed).shuffle(order)
+    cut = max(1, int(len(order) * split_ratio))
+    train_idx = order[:cut]
+    test_idx = order[cut:] or order[-1:]
+
+    train_df = df.iloc[train_idx]
+    test_df = df.iloc[test_idx]
+
+    if algorithm.task == "classification":
+        all_classes = sorted(list(set(train_df[target].dropna()) | set(test_df[target].dropna())))
+        if len(all_classes) < 2:
+            raise RunFailed(f"Column '{target}' has only one value, so there is nothing to tell apart. Choose a different target.")
+
+    # One-hot encode categoricals in features, impute NaNs
+    X_all = pd.get_dummies(df[feature_cols], drop_first=True, dummy_na=False, dtype=float)
+    if X_all.shape[1] == 0:
+        raise RunFailed("No valid feature columns available after encoding.")
+
+    # Impute with training-set medians only, so test rows never leak into the fill values.
+    med = X_all.iloc[train_idx].median().fillna(0.0)
+    X_all = X_all.fillna(med)
+
+    X_train = X_all.iloc[train_idx]
+    X_test = X_all.iloc[test_idx]
+    y_train = train_df[target]
+    y_test = test_df[target]
+
+    if algorithm.task == "classification":
+        if y_train.nunique() < 2:
+            raise RunFailed(
+                f"The training rows contain only one value of '{target}', so the model cannot learn. "
+                "Use a different target or a dataset with more rows of each class."
+            )
+        res = run_baseline(
+            task="classification",
+            model_name=algorithm_key,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            random_state=random_seed,
+        )
+        predictions = res["predictions"]
+        metrics = calculate_classification_metrics(
+            y_true=y_test.tolist(),
+            y_pred=list(predictions),
+            labels=all_classes,
+        )
+        return {
+            "task": "classification",
+            "standin": False,
+            "test_rows": len(y_test),
+            "accuracy": float(metrics["accuracy"]),
+            "precision": float(metrics["precision"]),
+            "recall": float(metrics["recall"]),
+            "f1_score": float(metrics["f1_score"]),
+            "confusion_matrix": metrics["confusion_matrix"],
+            "labels": [str(c) for c in all_classes],
+        }
+    else:
+        y_train_num = y_train.astype(float)
+        y_test_num = y_test.astype(float)
+        res = run_baseline(
+            task="regression",
+            model_name=algorithm_key,
+            X_train=X_train,
+            y_train=y_train_num,
+            X_test=X_test,
+            random_state=random_seed,
+        )
+        predictions = [float(p) for p in res["predictions"]]
+        metrics = calculate_regression_metrics(
+            y_true=y_test_num.tolist(),
+            y_pred=predictions,
+        )
+        return {
+            "task": "regression",
+            "standin": False,
+            "test_rows": len(y_test),
+            "mae": float(metrics["mae"]),
+            "mse": float(metrics["mse"]),
+            "rmse": float(metrics["rmse"]),
+            "r2": float(metrics["r2"]),
+        }
+
+
+def _train_and_score_standin(run):
     config = run.run_config
     target = config["target_column"]
     with run.dataset.file.open("rb") as handle:

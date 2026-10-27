@@ -55,4 +55,4 @@ jobs:
           echo "Found test file: $TEST_FILE"
 
       - name: Run tests
-        run: python -m pytest -q tests/
+        run: python -m pytest -q tests/ webui/
