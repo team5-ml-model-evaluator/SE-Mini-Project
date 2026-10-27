@@ -15,4 +15,9 @@ urlpatterns = [
         views.list_training_jobs,
         name="training_job_list",
     ),
+    path(
+        "jobs/<uuid:job_id>/status/",
+        views.training_job_status,
+        name="training_job_status",
+    ),
 ]
