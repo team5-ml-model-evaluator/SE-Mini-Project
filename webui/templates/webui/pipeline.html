@@ -1,0 +1,41 @@
+{% extends "webui/base.html" %}
+{% block title %}Pipeline{% endblock %}
+{% block content %}
+<h1>Choose target and features</h1>
+<p class="lede">Dataset: <a href="{% url 'dataset_detail' dataset.id %}">{{ dataset.original_name }}</a>. Pick the column the model should predict, then decide which other columns it may learn from.</p>
+{% include "webui/_errors.html" %}
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="panel">
+    <div class="target-field">
+      <label class="form-label" for="{{ form.target.id_for_label }}">{{ form.target.label }}</label>
+      {{ form.target }}
+      {% for error in form.target.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  </div>
+  <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Columns, scrollable">
+  <table class="table">
+    <caption>Mark each column as a feature or excluded. The target column is never used as a feature.</caption>
+    <thead><tr><th scope="col">Column</th><th scope="col">Type</th><th scope="col">Use as</th></tr></thead>
+    <tbody>
+    {% for row in form.role_rows %}
+    <tr>
+      <th scope="row">{{ row.name }}</th>
+      <td>{% for c in dataset.profile.columns %}{% if c.name == row.name %}{% include "webui/_dtype.html" with dtype=c.dtype %}{% endif %}{% endfor %}</td>
+      <td>
+        <fieldset>
+          <legend class="visually-hidden">Use {{ row.name }} as</legend>
+          <div class="segmented">
+          {% for radio in row.field %}{{ radio.tag }}<label class="btn" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>{% endfor %}
+          </div>
+          {% for error in row.field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </fieldset>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <button type="submit" class="btn btn-primary">Save and continue to model</button>
+</form>
+{% endblock %}
