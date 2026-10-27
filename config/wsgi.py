@@ -1,6 +1,5 @@
-
 """
-WSGI config for the ML Model Evaluator project.
+WSGI configuration for the ML Model Evaluator.
 """
 import os
 

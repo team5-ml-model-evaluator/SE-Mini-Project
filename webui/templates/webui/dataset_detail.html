@@ -1,0 +1,22 @@
+{% extends "webui/base.html" %}
+{% block title %}{{ dataset.original_name }}{% endblock %}
+{% block content %}
+<h1>{{ dataset.original_name }}</h1>
+<p class="lede">{{ dataset.rows }} rows and {{ dataset.column_count }} columns. Check the profile, then choose what to predict.</p>
+<div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Column profile, scrollable">
+<table class="table">
+  <caption>Column profile: inferred type and share of missing values</caption>
+  <thead><tr><th scope="col">Column</th><th scope="col">Type</th><th scope="col">Missing values</th></tr></thead>
+  <tbody>
+  {% for c in dataset.profile.columns %}
+  <tr>
+    <th scope="row">{{ c.name }}</th>
+    <td>{% include "webui/_dtype.html" with dtype=c.dtype %}</td>
+    <td><span class="missing{% if c.missing_count %} missing--some{% endif %}">{{ c.missing_count }} ({{ c.missing_pct }}%)</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<a class="btn btn-primary" href="{% url 'pipeline_step' dataset.id %}">Continue to pipeline</a>
+{% endblock %}

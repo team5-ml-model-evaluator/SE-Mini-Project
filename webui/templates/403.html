@@ -1,0 +1,6 @@
+{% extends "webui/base.html" %}
+{% block title %}Not allowed{% endblock %}
+{% block content %}
+<h1 class="h3">You can't open this page</h1>
+<p>This item belongs to another account. Go back to <a href="{% url 'dataset_list' %}">your datasets</a>.</p>
+{% endblock %}

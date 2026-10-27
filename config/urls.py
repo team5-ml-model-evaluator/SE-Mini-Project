@@ -1,9 +1,8 @@
-
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
-from django.urls import path
+from django.urls import include, path
 
 from .views import admin_dashboard, register
 
@@ -27,5 +26,6 @@ urlpatterns = [
     ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("admin-dashboard/", admin_dashboard, name="admin_dashboard"),
-    path("", dashboard, name="dashboard"),
+    path("dashboard/", dashboard, name="dashboard"),
+    path("", include("webui.urls")),
 ]
