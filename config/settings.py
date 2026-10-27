@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "webui",
     "datasets",
+    "preprocessing",
 ]
 
 MIDDLEWARE = [
