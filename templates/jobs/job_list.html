@@ -1,0 +1,48 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Training Jobs | ML Model Evaluator</title>
+</head>
+<body>
+    <main>
+        <h1>My Training Jobs</h1>
+        <p>View the training jobs you have submitted.</p>
+
+        <p>
+            <a href="{% url 'create_training_job' %}">
+                Create a New Training Job
+            </a>
+        </p>
+
+        {% if jobs %}
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Job ID</th>
+                        <th scope="col">Dataset</th>
+                        <th scope="col">Model</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Created (UTC)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                        <tr>
+                            <td><code>{{ job.id }}</code></td>
+                            <td>{{ job.dataset_name }}</td>
+                            <td>{{ job.model_name }}</td>
+                            <td>{{ job.get_status_display }}</td>
+                            <td>{{ job.created_at|date:"Y-m-d H:i:s" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>You have not submitted any training jobs yet.</p>
+        {% endif %}
+    </main>
+</body>
+</html>
