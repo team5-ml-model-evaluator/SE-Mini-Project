@@ -1,0 +1,38 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Create Training Job | ML Model Evaluator</title>
+</head>
+<body>
+    <main>
+        <h1>Create a Training Job</h1>
+        <p>Configure a machine-learning evaluation request.</p>
+
+        <form method="post">
+            {% csrf_token %}
+
+            {{ form.non_field_errors }}
+
+            {% for field in form %}
+                <div>
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                        <p><small>{{ field.help_text }}</small></p>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <p role="alert">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <button type="submit">Create Job</button>
+        </form>
+
+        <p><a href="{% url 'training_job_list' %}">View My Jobs</a></p>
+    </main>
+</body>
+</html>
