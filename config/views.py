@@ -1,8 +1,20 @@
 
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import Group
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
+
+from .permissions import role_required
+
+
+@role_required("Admin")
+def admin_dashboard(request):
+    """Display a page accessible only to administrators."""
+    return HttpResponse(
+        "Administrator access granted. "
+        "You can manage the ML Model Evaluator."
+    )
 
 
 @require_http_methods(["GET", "POST"])
