@@ -61,7 +61,7 @@ class UploadFormTests(WebUITestCase):
         self.client.logout()
         response = self.client.get(reverse("dataset_new"))
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
+        self.assertIn(reverse("login"), response["Location"])
 
     def test_form_has_a_labelled_file_control_and_stage_indicator(self):
         html = self.client.get(reverse("dataset_new")).content.decode()

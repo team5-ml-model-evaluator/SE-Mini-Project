@@ -104,6 +104,8 @@ USE_TZ = True
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 STATIC_URL = "static/"
+# Uploaded datasets live outside any served path (SAD: per-user directory on the file system).
+MEDIA_ROOT = BASE_DIR / "var" / "uploads"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"
@@ -114,3 +116,7 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 X_FRAME_OPTIONS = "DENY"
+
+STANDIN_QUEUE_SECONDS = 2
+STANDIN_RUN_SECONDS = 8
+STANDIN_RUN_SYNC = False

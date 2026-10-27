@@ -266,11 +266,18 @@ class ResultsTests(RunTestCase):
                 self.assertIn("<caption>", table)
                 self.assertIn('scope="col"', table)
 
+    @override_settings(STANDIN_FORCE_BASELINE=True)
     def test_results_say_they_are_placeholders_while_the_worker_is_a_stand_in(self):
         _, run, _ = self.start()
         html = self.page(run)
         self.assertIn("Placeholder results", html)
         self.assertIn("not from Random Forest", html)
+
+    def test_results_do_not_show_placeholder_warning_when_real_worker_runs(self):
+        _, run, _ = self.start()
+        html = self.page(run)
+        self.assertNotIn("Placeholder results", html)
+        self.assertNotIn("The training worker is not connected yet", html)
 
     def test_no_chart_without_a_table(self):
         _, run, _ = self.start()
