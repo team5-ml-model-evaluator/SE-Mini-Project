@@ -1,0 +1,29 @@
+{% extends "webui/base.html" %}
+{% block title %}Datasets{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <h1>Your datasets</h1>
+    <p class="lede mb-0">Upload a CSV, choose what to predict, then pick a model.</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'dataset_new' %}">Upload a CSV dataset</a>
+</div>
+{% if datasets %}
+<div class="table-wrap" tabindex="0" role="region" aria-label="Datasets, scrollable">
+<table class="table table-hover">
+  <caption>Datasets you have uploaded</caption>
+  <thead><tr><th scope="col">File</th><th scope="col">Rows</th><th scope="col">Columns</th><th scope="col">Uploaded (UTC)</th></tr></thead>
+  <tbody>
+  {% for d in datasets %}
+  <tr><th scope="row"><a href="{% url 'dataset_detail' d.id %}">{{ d.original_name }}</a></th><td>{{ d.rows }}</td><td>{{ d.column_count }}</td><td>{{ d.created_at|date:"Y-m-d H:i" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<div class="panel empty">
+  <p class="h5 mb-1">No datasets yet</p>
+  <p class="mb-0">Upload a CSV file to start your first comparison.</p>
+</div>
+{% endif %}
+{% endblock %}

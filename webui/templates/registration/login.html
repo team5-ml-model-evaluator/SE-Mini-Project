@@ -1,0 +1,19 @@
+{% extends "webui/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="auth-card">
+<h1>Sign in</h1>
+<p class="lede">Temporary sign-in until the accounts feature is merged.</p>
+{% if form.errors %}
+<div id="error-summary" class="alert alert-danger" role="alert" tabindex="-1">The username or password is not correct. Check both and try again.</div>
+{% endif %}
+<form method="post" novalidate class="panel">
+  {% csrf_token %}
+  <div class="mb-3"><label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+    <input class="form-control" type="text" name="username" id="{{ form.username.id_for_label }}" autocomplete="username" required></div>
+  <div class="mb-4"><label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+    <input class="form-control" type="password" name="password" id="{{ form.password.id_for_label }}" autocomplete="current-password" required></div>
+  <button type="submit" class="btn btn-primary w-100">Sign in</button>
+</form>
+</div>
+{% endblock %}

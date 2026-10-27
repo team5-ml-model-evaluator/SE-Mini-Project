@@ -1,0 +1,9 @@
+<nav aria-label="Workflow stages">
+  <ol class="stages">
+    {% for s in stages %}
+    <li class="{{ s.status }}"{% if s.status == "current" %} aria-current="step"{% endif %}>
+      {{ s.number }}. {{ s.label }}{% if s.status == "done" %}<span class="visually-hidden"> (completed)</span>{% elif s.status == "current" %}<span class="visually-hidden"> (current stage)</span>{% else %}<span class="visually-hidden"> (not started)</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</nav>

@@ -1,0 +1,20 @@
+{% extends "webui/base.html" %}
+{% block title %}Review settings{% endblock %}
+{% block content %}
+<h1>Review your settings</h1>
+<p class="lede">These are saved for {{ dataset.original_name }}. Check them, then start the run.</p>
+<section class="panel" aria-labelledby="sheet-title">
+  <h2 id="sheet-title" class="h5 mb-2">Settings</h2>
+  <dl class="sheet">
+    <div><dt>Target column</dt><dd>{{ draft.target_column }}</dd></div>
+    <div><dt>Feature columns</dt><dd>{% for c in draft.feature_columns %}<span class="chip">{{ c }}</span>{% endfor %}</dd></div>
+    <div><dt>Excluded columns</dt><dd>{% for c in draft.excluded_columns %}<span class="chip">{{ c }}</span>{% empty %}None{% endfor %}</dd></div>
+    <div><dt>Algorithm</dt><dd>{{ algorithm.label }} ({{ algorithm.task }})</dd></div>
+  </dl>
+</section>
+<form method="post" action="{% url 'start_run' dataset.id %}" class="mb-3">{% csrf_token %}
+  <button type="submit" class="btn btn-primary">Start run</button>
+</form>
+<a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'pipeline_step' dataset.id %}">Change columns</a>
+<a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'model_step' dataset.id %}">Change algorithm</a>
+{% endblock %}
