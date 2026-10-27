@@ -40,13 +40,12 @@ jobs:
       - name: Verify Python test files exist
         shell: bash
         run: |
-          TEST_FILE=$(find . \
-            -type f \
-            -name "test_*.py" \
-            -not -path "./.git/*" \
-            -not -path "./.venv/*" \
-            -not -path "./venv/*" \
-            -print -quit)
+          if [ ! -d tests ]; then
+            echo "::error::The tests directory was not found."
+            exit 1
+          fi
+
+          TEST_FILE=$(find tests -type f -name "test_*.py" -print -quit)
 
           if [ -z "$TEST_FILE" ]; then
             echo "::error::No Python test files found. Tests were not run."
@@ -56,4 +55,4 @@ jobs:
           echo "Found test file: $TEST_FILE"
 
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -q tests/
