@@ -1,4 +1,3 @@
-
 """Django settings for the Web Based ML Model Evaluator."""
 import os
 from pathlib import Path
@@ -32,6 +31,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "webui",
+    "jobs.apps.JobsConfig",
 ]
 
 MIDDLEWARE = [
@@ -101,10 +101,11 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"

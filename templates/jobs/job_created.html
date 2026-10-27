@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Training Job Created | ML Model Evaluator</title>
+</head>
+<body>
+    <main>
+        <h1>Training Job Created</h1>
+        <p>Your training request has been saved successfully.</p>
+
+        <dl>
+            <dt>Job ID</dt>
+            <dd><code>{{ job.id }}</code></dd>
+
+            <dt>Dataset</dt>
+            <dd>{{ job.dataset_name }}</dd>
+
+            <dt>Model</dt>
+            <dd>{{ job.model_name }}</dd>
+
+            <dt>Status</dt>
+            <dd>{{ job.get_status_display }}</dd>
+
+            <dt>Submitted</dt>
+            <dd>{{ job.created_at|date:"Y-m-d H:i:s" }} UTC</dd>
+        </dl>
+
+        <p>
+            Your job is queued. This page confirms job creation;
+            training execution and live status updates are implemented separately.
+        </p>
+
+        <p><a href="{% url 'training_job_list' %}">View My Jobs</a></p>
+        <p><a href="{% url 'create_training_job' %}">Create Another Job</a></p>
+    </main>
+</body>
+</html>

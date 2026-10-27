@@ -1,0 +1,113 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Training Jobs | ML Model Evaluator</title>
+</head>
+<body>
+    <main>
+        <h1>My Training Jobs</h1>
+        <p>View your submitted training jobs. Statuses refresh automatically.</p>
+
+        <p>
+            <a href="{% url 'create_training_job' %}">
+                Create a New Training Job
+            </a>
+        </p>
+
+        {% if jobs %}
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Job ID</th>
+                        <th scope="col">Dataset</th>
+                        <th scope="col">Model</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Created (UTC)</th>
+                        <th scope="col">Failure Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                        <tr
+                            data-status-url="{% url 'training_job_status' job_id=job.id %}"
+                        >
+                            <td><code>{{ job.id }}</code></td>
+                            <td>{{ job.dataset_name }}</td>
+                            <td>{{ job.model_name }}</td>
+                            <td>
+                                <span class="job-status" aria-live="polite">
+                                    {{ job.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {{ job.created_at|date:"Y-m-d H:i:s" }}
+                            </td>
+                            <td>
+                                <span class="job-error">
+                                    {% if job.status == "failed" %}
+                                        {{ job.error_message }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>You have not submitted any training jobs yet.</p>
+        {% endif %}
+
+        <p id="refresh-message" role="status" aria-live="polite">
+            Checking job statuses every 5 seconds.
+        </p>
+    </main>
+
+    <script>
+        async function refreshJobStatuses() {
+            const rows = document.querySelectorAll("tr[data-status-url]");
+
+            for (const row of rows) {
+                try {
+                    const response = await fetch(row.dataset.statusUrl, {
+                        method: "GET",
+                        credentials: "same-origin",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    });
+
+                    if (!response.ok) {
+                        continue;
+                    }
+
+                    const job = await response.json();
+
+                    const statusElement = row.querySelector(".job-status");
+                    const errorElement = row.querySelector(".job-error");
+
+                    if (statusElement) {
+                        statusElement.textContent = job.status_display;
+                    }
+
+                    if (errorElement) {
+                        errorElement.textContent =
+                            job.status === "failed" ? job.error_message : "";
+                    }
+                } catch (error) {
+                    const message = document.getElementById("refresh-message");
+                    if (message) {
+                        message.textContent =
+                            "Unable to refresh some statuses. Retrying shortly.";
+                    }
+                }
+            }
+        }
+
+        refreshJobStatuses();
+        window.setInterval(refreshJobStatuses, 5000);
+    </script>
+</body>
+</html>
