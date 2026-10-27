@@ -5,6 +5,8 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.urls import path
 
+from .views import register
+
 
 @login_required
 def dashboard(request):
@@ -15,6 +17,7 @@ def dashboard(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("register/", register, name="register"),
     path(
         "login/",
         auth_views.LoginView.as_view(
@@ -22,10 +25,6 @@ urlpatterns = [
         ),
         name="login",
     ),
-    path(
-        "logout/",
-        auth_views.LogoutView.as_view(),
-        name="logout",
-    ),
+    path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", dashboard, name="dashboard"),
 ]
