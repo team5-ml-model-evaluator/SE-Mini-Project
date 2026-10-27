@@ -29,23 +29,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-          if [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt
-          else
+          if [ ! -f requirements.txt ]; then
             echo "::error::requirements.txt not found."
             exit 1
           fi
 
+          python -m pip install -r requirements.txt
           python -m pip install pytest
 
-      - name: Verify test files exist
+      - name: Verify Python test files exist
+        shell: bash
         run: |
-          if [ ! -d tests ]; then
-            echo "::error::No tests directory found. Tests were not run."
-            exit 1
-          fi
-
-          TEST_FILE=$(find tests -type f -name "test_*.py" -print -quit)
+          TEST_FILE=$(find . \
+            -type f \
+            -name "test_*.py" \
+            -not -path "./.git/*" \
+            -not -path "./.venv/*" \
+            -not -path "./venv/*" \
+            -print -quit)
 
           if [ -z "$TEST_FILE" ]; then
             echo "::error::No Python test files found. Tests were not run."
