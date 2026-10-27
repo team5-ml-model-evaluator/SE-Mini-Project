@@ -28,17 +28,31 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+
           if [ -f requirements.txt ]; then
             python -m pip install -r requirements.txt
           else
-            echo "requirements.txt not present yet; skipping project dependencies."
+            echo "::error::requirements.txt not found."
+            exit 1
           fi
+
           python -m pip install pytest
 
-      - name: Run tests
+      - name: Verify test files exist
         run: |
-          if [ -d tests ] && find tests -type f -name "test_*.py" -print -quit | grep -q .; then
-            python -m pytest -q
-          else
-            echo "No Python test files found yet; skipping pytest."
+          if [ ! -d tests ]; then
+            echo "::error::No tests directory found. Tests were not run."
+            exit 1
           fi
+
+          TEST_FILE=$(find tests -type f -name "test_*.py" -print -quit)
+
+          if [ -z "$TEST_FILE" ]; then
+            echo "::error::No Python test files found. Tests were not run."
+            exit 1
+          fi
+
+          echo "Found test file: $TEST_FILE"
+
+      - name: Run tests
+        run: python -m pytest -q
