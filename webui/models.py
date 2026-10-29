@@ -65,3 +65,45 @@ class Run(models.Model):
             return None
         end = self.finished_at or timezone.now()
         return round((end - self.started_at).total_seconds(), 1)
+
+class AuditLogQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValueError("Audit records cannot be modified.")
+
+    def delete(self):
+        raise ValueError("Audit records cannot be deleted.")
+
+
+class AuditLogManager(models.Manager.from_queryset(AuditLogQuerySet)):
+    pass
+
+class AuditLog(models.Model):
+    objects = AuditLogManager()
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=50)
+    resource = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(default=timezone.now, editable=False)
+    outcome = models.CharField(max_length=20)
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["timestamp"]
+
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValueError("Audit records cannot be modified.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Audit records cannot be deleted.")
+
+    def __str__(self):
+        return f"{self.action}: {self.resource} ({self.outcome})"

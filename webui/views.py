@@ -13,6 +13,7 @@ from .stages import stage_list
 from .standins import runs
 from .standins.catalogue import BY_KEY
 
+from .audit import record_audit
 
 def _owned_dataset(request, pk):
     """404 for an unknown id, 403 when the dataset belongs to someone else (MLE-F-013 / MLE-SR-003)."""
@@ -51,6 +52,15 @@ def dataset_new(request):
             profile=form.profile,
         )
         dataset.save()
+
+        record_audit(
+            actor=request.user ,
+            action="dataset_upload" ,
+            resource=f"dataset:{dataset.id}" ,
+            outcome="success" ,
+            details={"filename": dataset.original_name} ,
+        )
+
         messages.success(request, f"“{dataset.original_name}” was uploaded.")
         return redirect("dataset_detail", pk=dataset.id)
     return _page(request, "upload.html", "dataset", form=form, errors=error_summary(form) if form.errors else [])
