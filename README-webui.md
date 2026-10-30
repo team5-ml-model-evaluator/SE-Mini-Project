@@ -34,3 +34,35 @@ The stand-in worker does not train the chosen algorithm. It scores a trivial bas
 (most frequent class, or the training mean) on a held-out split, and the results page
 says so. Delete `webui/standins/runs.py` and point `views.py` at RunsApp to swap it out.
 The delays are `STANDIN_QUEUE_SECONDS` and `STANDIN_RUN_SECONDS` in `config/settings.py`.
+
+## Multi-run comparison (#20)
+
+Open a dataset or a completed run and choose **Compare completed runs**. Select
+two or more completed runs with the same dataset, target column and task type.
+Different algorithms, feature selections and preprocessing configurations are
+allowed. Only the signed-in user's completed runs for that dataset are listed.
+
+The comparison shows stored metrics side by side: classification metrics as
+percentages to two decimal places, and regression metrics as numbers to two
+decimal places, without changing stored precision. Classification comparisons include each run's labelled confusion
+matrix. The table scrolls horizontally for additional runs and can be reached
+with the keyboard. Invalid selections or incomplete evaluation data show an
+explanatory message. Placeholder baseline results are explicitly identified.
+
+For more than 20 classes, comparison shows an explicitly labelled 20 × 20
+matrix preview. **Browse full matrix** opens the run's paginated matrix; separate
+actual-class and predicted-class controls make every stored cell accessible.
+Run selection and status polling do not load the stored result matrices.
+
+The route is `/datasets/<dataset-id>/compare/`. Comparison data is prepared in
+`webui/comparison.py` so a future report/CSV export can reuse the same values.
+No database migration or additional package is needed.
+
+Run the focused tests with `python manage.py test webui.test_comparison`.
+
+Model selection also checks likely numeric-amount targets before classification
+training: a numeric target with more than 20 distinct values and more than half
+its non-missing rows distinct is rejected with guidance to choose regression or
+a categorical target. This heuristic allows numeric category codes such as 0/1.
+The start-run endpoint repeats the check for previously saved drafts.
+Run its tests with `python manage.py test webui.test_target_validation`.

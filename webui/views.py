@@ -2,12 +2,15 @@ import os
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from .forms import ModelForm, PipelineForm, UploadForm, error_summary
+from .comparison import build_comparison
+from .matrices import matrix_window
+from .target_validation import validate_classification_target
+from .forms import ComparisonForm, ModelForm, PipelineForm, UploadForm, error_summary
 from .models import Dataset, Run
 from .stages import stage_list
 from .standins import runs
@@ -94,7 +97,8 @@ def model_step(request, pk):
         messages.error(request, "Choose the target and feature columns before choosing a model.")
         return redirect("pipeline_step", pk=dataset.id)
     posted = request.method == "POST"
-    form = ModelForm(request.POST if posted else None, initial={"algorithm": draft.get("algorithm", "")})
+    form = ModelForm(request.POST if posted else None, initial={"algorithm": draft.get("algorithm", "")},
+                     dataset=dataset, target=draft["target_column"])
     if posted and form.is_valid():
         draft["algorithm"] = form.cleaned_data["algorithm"]
         request.session[_draft_key(dataset)] = draft
@@ -142,12 +146,18 @@ def start_run(request, pk):
     if not draft or "algorithm" not in draft:
         messages.error(request, "Choose an algorithm before starting a run.")
         return redirect("model_step", pk=dataset.id)
+    try:
+        validate_classification_target(dataset, draft.get("target_column"), draft["algorithm"])
+    except ValidationError as exc:
+        for message in exc.messages:
+            messages.error(request, message)
+        return redirect("model_step", pk=dataset.id)
     job_key = runs.start(request.user, dataset, _run_config(dataset, draft))
     return redirect("run_detail", job_key=job_key)
 
 
 def _owned_run(request, job_key):
-    run = get_object_or_404(Run, job_key=job_key)
+    run = get_object_or_404(Run.objects.defer("result"), job_key=job_key)
     if run.owner_id != request.user.id:
         raise PermissionDenied
     return run
@@ -169,14 +179,10 @@ def run_detail(request, job_key):
     run.refresh_from_db()
     stage = "results" if run.state == Run.COMPLETED else "run"
     result = run.result or {}
-    labels = result.get("labels") or []
-    matrix = []
-    for i, row in enumerate(result.get("confusion_matrix") or []):
-        matrix.append({"label": labels[i] if i < len(labels) else str(i), "cells": [
-            {"value": value, "correct": j == i} for j, value in enumerate(row)]})
+    window = matrix_window(result, request.GET.get("matrix_row", 1), request.GET.get("matrix_col", 1))
     return _page(
         request, "run.html", stage, run=run, status=status, clock=_clock(status["elapsed_s"]),
-        result=result, matrix=matrix, labels=labels,
+        result=result, matrix=window["rows"], labels=window["labels"], matrix_window=window,
         algorithm=BY_KEY[run.run_config["algorithm"]],
         active=run.state in (Run.QUEUED, Run.RUNNING),
     )
@@ -187,7 +193,7 @@ def run_status(request, job_key):
     """GET /api/runs/<job_key>/status (SAD interface 1). 401 signed out, 403 someone else's run, 404 unknown."""
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Sign in to see this run."}, status=401)
-    run = Run.objects.filter(job_key=job_key).first()
+    run = Run.objects.defer("result", "run_config").filter(job_key=job_key).first()
     if run is None:
         return JsonResponse({"error": "There is no run with this key."}, status=404)
     if run.owner_id != request.user.id:
@@ -195,3 +201,27 @@ def run_status(request, job_key):
     response = JsonResponse(runs.get_status(run))
     response["Cache-Control"] = "no-store"
     return response
+
+
+def _comparison_selection(request, dataset, submitted):
+    form = ComparisonForm(request.GET if submitted else None, owner=request.user, dataset=dataset)
+    comparison = None
+    if submitted and form.is_valid():
+        by_key = {run.job_key: run for run in form.cleaned_data["runs"]}
+        # Keep the submitted column order and remove repeated keys.
+        selected = [by_key[key] for key in dict.fromkeys(request.GET.getlist("runs"))]
+        try:
+            comparison = build_comparison(selected)
+        except ValidationError as exc:
+            form.add_error("runs", exc)
+    return form, comparison
+
+
+@login_required
+@require_GET
+def run_comparison(request, pk):
+    dataset = _owned_dataset(request, pk)
+    submitted = "compare" in request.GET or "runs" in request.GET
+    form, comparison = _comparison_selection(request, dataset, submitted)
+    return _page(request, "comparison.html", "results", dataset=dataset, form=form,
+                 comparison=comparison, has_runs=form.fields["runs"].queryset.exists())
