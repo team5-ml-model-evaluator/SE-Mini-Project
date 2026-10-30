@@ -53,6 +53,17 @@
 </section>
 <section class="panel" aria-labelledby="matrix-title">
   <h2 id="matrix-title" class="h5">Confusion matrix</h2>
+  {% if matrix_window.paginated %}
+  <p>This result has {{ matrix_window.class_count }} classes. The matrix is shown in smaller pages so the results stay responsive. All stored values remain available using the controls below.</p>
+  <p>If your target is an amount such as debt or income, consider a regression algorithm instead of classification.</p>
+  <p>Rows {{ matrix_window.row_start }}–{{ matrix_window.row_end }} of {{ matrix_window.class_count }} actual classes; columns {{ matrix_window.col_start }}–{{ matrix_window.col_end }} of {{ matrix_window.class_count }} predicted classes.</p>
+  <nav aria-label="Confusion matrix pages" class="d-flex flex-wrap gap-2 mb-3">
+    {% if matrix_window.previous_row %}<a class="btn btn-outline-secondary" href="?matrix_row={{ matrix_window.previous_row }}&amp;matrix_col={{ matrix_window.col_page }}#matrix-title">Previous actual classes</a>{% endif %}
+    {% if matrix_window.next_row %}<a class="btn btn-outline-secondary" href="?matrix_row={{ matrix_window.next_row }}&amp;matrix_col={{ matrix_window.col_page }}#matrix-title">Next actual classes</a>{% endif %}
+    {% if matrix_window.previous_col %}<a class="btn btn-outline-secondary" href="?matrix_row={{ matrix_window.row_page }}&amp;matrix_col={{ matrix_window.previous_col }}#matrix-title">Previous predicted classes</a>{% endif %}
+    {% if matrix_window.next_col %}<a class="btn btn-outline-secondary" href="?matrix_row={{ matrix_window.row_page }}&amp;matrix_col={{ matrix_window.next_col }}#matrix-title">Next predicted classes</a>{% endif %}
+  </nav>
+  {% endif %}
   <div class="table-wrap" tabindex="0" role="region" aria-label="Confusion matrix, scrollable">
   <table class="table matrix">
     <caption>Rows are the actual class, columns are the predicted class. Cells marked with a tick are correct predictions.</caption>
@@ -88,4 +99,5 @@
 {% endif %}
 
 <a class="btn btn-outline-secondary" href="{% url 'dataset_list' %}">Back to datasets</a>
+{% if run.state == "Completed" %}<a class="btn btn-outline-secondary" href="{% url 'run_comparison' run.dataset.id %}">Compare completed runs</a>{% endif %}
 {% endblock %}

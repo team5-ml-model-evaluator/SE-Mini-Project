@@ -1,0 +1,66 @@
+{% extends "webui/base.html" %}
+{% block title %}Compare runs · {{ dataset.original_name }}{% endblock %}
+{% block content %}
+<h1>Compare completed runs</h1>
+<p class="lede">Dataset: <a href="{% url 'dataset_detail' dataset.id %}">{{ dataset.original_name }}</a>. Select at least two runs with the same target column and task type. Different algorithms and preprocessing settings are allowed.</p>
+
+{% if form.errors %}
+<div class="alert alert-danger" role="alert">
+  <h2 class="h6">Check your selection</h2>
+  {% for error in form.runs.errors %}<p class="mb-0">{{ error }}</p>{% endfor %}
+</div>
+{% endif %}
+
+{% if has_runs %}
+<form method="get" class="panel">
+  <fieldset aria-describedby="selection-help{% if form.errors %} selection-errors{% endif %}">
+    <legend class="h5">{{ form.runs.label }}</legend>
+    <p id="selection-help">Select two or more. Only your completed runs for this dataset are listed.</p>
+    {% if form.errors %}<div id="selection-errors" class="text-danger">{% for error in form.runs.errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+    {% for checkbox in form.runs %}
+    <div class="d-flex align-items-baseline gap-2 mb-3">
+      {{ checkbox.tag }}<label for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+    </div>
+    {% endfor %}
+  </fieldset>
+  <button class="btn btn-primary" type="submit" name="compare" value="1">Compare selected runs</button>
+</form>
+{% else %}
+<div class="panel"><p class="mb-0">Complete at least two runs on this dataset to compare their results.</p></div>
+{% endif %}
+
+{% if comparison %}
+<section aria-labelledby="comparison-title">
+  <h2 id="comparison-title">{{ comparison.task|capfirst }} comparison</h2>
+  <p>Target: <strong class="mono">{{ comparison.target }}</strong>. Saved evaluation results are displayed {% if comparison.task == "classification" %}as percentages {% endif %}to two decimal places.</p>
+  <p>{% if comparison.task == "classification" %}Higher is better for these metrics. Precision, recall and F1-score use class-frequency weighted averages.{% else %}Lower is better for MAE, MSE and RMSE; higher is better for R².{% endif %} Different features, preprocessing or train/test splits can affect comparability; review each run's settings before drawing conclusions.</p>
+  <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Run comparison, scroll horizontally to see every run">
+  <table class="table">
+    <caption>Completed runs on {{ dataset.original_name }}, predicting {{ comparison.target }}. Scroll horizontally for additional runs.</caption>
+    <thead><tr><th scope="col">Metric</th>{% for column in comparison.columns %}
+      <th scope="col"><a href="{% url 'run_detail' column.run.job_key %}">{{ column.run.job_key }}</a><br>{{ column.algorithm.label }}{% if column.run.result.standin %}<br><span>Placeholder baseline</span>{% endif %}</th>
+    {% endfor %}</tr></thead>
+    <tbody>
+      {% for row in comparison.rows %}
+      <tr><th scope="row">{{ row.label }}</th>{% for value in row.display_values %}<td class="num">{{ value }}</td>{% endfor %}</tr>
+      {% endfor %}
+      {% if comparison.task == "classification" %}
+      <tr><th scope="row">Confusion matrix</th>{% for column in comparison.columns %}
+        <td>
+          {% if column.matrix_preview.paginated %}<p>Showing the first 20 of {{ column.matrix_preview.class_count }} classes in each direction. <a href="{% url 'run_detail' column.run.job_key %}#matrix-title">Browse full matrix</a></p>{% endif %}
+          <table class="table matrix">
+            <caption>{{ column.run.job_key }}: rows are actual classes; columns are predicted classes.</caption>
+            <thead><tr><th scope="col">Actual / predicted</th>{% for label in column.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in column.matrix_rows %}<tr><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td class="num">{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          </table>
+        </td>
+      {% endfor %}</tr>
+      {% endif %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+<a class="btn btn-outline-secondary" href="{% url 'dataset_detail' dataset.id %}">Back to dataset</a>
+<a class="btn btn-outline-secondary" href="{% url 'pipeline_step' dataset.id %}">Configure another run</a>
+{% endblock %}

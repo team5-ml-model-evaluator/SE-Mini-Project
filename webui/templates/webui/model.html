@@ -9,6 +9,7 @@
   <div class="mb-4 target-field">
     <label class="form-label" for="{{ form.algorithm.id_for_label }}">{{ form.algorithm.label }}</label>
     {{ form.algorithm }}
+    <p id="algorithm-help" class="form-text">{{ form.algorithm.help_text }}</p>
     {% for error in form.algorithm.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
   </div>
   <button type="submit" class="btn btn-primary">Save and review settings</button>

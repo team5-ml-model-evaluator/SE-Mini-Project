@@ -1,9 +1,44 @@
 from django import forms
 
+from .models import Run
 from .standins.catalogue import ALGORITHMS
+from .standins.catalogue import BY_KEY
 from .standins.datasets import DatasetRejected, validate_csv
+from .target_validation import validate_classification_target
 
 ROLE_CHOICES = [("feature", "Feature"), ("excluded", "Excluded")]
+
+
+class RunChoiceField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, run):
+        config = run.run_config if isinstance(run.run_config, dict) else {}
+        key = config.get("algorithm", "")
+        algorithm = BY_KEY.get(key) if isinstance(key, str) else None
+        name = algorithm.label if algorithm else "Unknown algorithm"
+        task = algorithm.task if algorithm else "unknown task"
+        return (f"{run.job_key} · {name} · target: {config.get('target_column', 'unknown')} "
+                f"· {task} · {run.created_at:%Y-%m-%d %H:%M} UTC")
+
+
+class ComparisonForm(forms.Form):
+    runs = RunChoiceField(
+        queryset=Run.objects.none(), to_field_name="job_key", required=False,
+        label="Completed runs", widget=forms.CheckboxSelectMultiple,
+        error_messages={"invalid_choice": "Choose only completed runs from this dataset that belong to you.",
+                        "invalid_pk_value": "Choose only completed runs from this dataset that belong to you."},
+    )
+
+    def __init__(self, *args, owner, dataset, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["runs"].queryset = Run.objects.filter(
+            owner=owner, dataset=dataset, state=Run.COMPLETED,
+        ).defer("result")
+
+    def clean_runs(self):
+        selected = self.cleaned_data["runs"]
+        if len(selected) < 2:
+            raise forms.ValidationError("Select at least two different completed runs to compare.")
+        return selected
 
 
 class UploadForm(forms.Form):
@@ -74,20 +109,29 @@ class PipelineForm(forms.Form):
 class ModelForm(forms.Form):
     algorithm = forms.ChoiceField(
         label="Algorithm",
+        help_text="Classification predicts categories such as yes/no. Regression predicts numeric amounts such as debt or income.",
         error_messages={
             "required": "Choose an algorithm.",
             "invalid_choice": "Choose an algorithm from the list.",
         },
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=forms.Select(attrs={"class": "form-select", "aria-describedby": "algorithm-help"}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, dataset=None, target=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.dataset = dataset
+        self.target = target
         grouped = [
             (task.capitalize(), [(a.key, a.label) for a in ALGORITHMS if a.task == task])
             for task in ("classification", "regression")
         ]
         self.fields["algorithm"].choices = [("", "Choose an algorithm")] + grouped
+
+    def clean_algorithm(self):
+        algorithm = self.cleaned_data["algorithm"]
+        if self.dataset is not None and self.target is not None:
+            validate_classification_target(self.dataset, self.target, algorithm)
+        return algorithm
 
 
 def error_summary(form):

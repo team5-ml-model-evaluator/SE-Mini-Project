@@ -19,4 +19,5 @@
 </table>
 </div>
 <a class="btn btn-primary" href="{% url 'pipeline_step' dataset.id %}">Continue to pipeline</a>
+<a class="btn btn-outline-secondary" href="{% url 'run_comparison' dataset.id %}">Compare completed runs</a>
 {% endblock %}
