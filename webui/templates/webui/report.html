@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluation report · {{ report.algorithm }}{% if report.detailed %} · Technical{% endif %}</title>
+<style>
+body { font: 15px/1.5 system-ui, sans-serif; color: #172536; margin: 2rem auto; padding: 0 1rem; max-width: 65rem; }
+h1,h2 { color: #173a61; } h2 { margin-top: 2rem; } table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th,td { padding: .55rem; border: 1px solid #c7d2df; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+thead { background: #e6eef7; } tbody tr:nth-child(even) { background: #f5f7fa; } caption { text-align: left; font-weight: bold; }
+.notice { padding: 1rem; border: 2px solid #7c5900; } .labels { overflow-wrap: anywhere; } @media print { body { margin: 0; } thead { display: table-header-group; } tr { break-inside: avoid; } }
+.client-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; border-bottom: 3px solid #007e87; padding: .5rem 0 1rem; font-weight: 700; color: #176c85; }
+.client-title { margin: 1.5rem 0 .2rem; font-size: 2.5rem; color: #112a3a; letter-spacing: -.04em; }
+.client-model { margin: 0 0 1.5rem; color: #516779; font-size: 1.2rem; }
+.metric-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .8rem; }
+.metric-card { background: #e9f7f5; padding: 1.1rem; border-bottom: 3px solid #007e87; }
+.metric-card h2 { margin: 0; font-size: .85rem; color: #176c85; }
+.metric-value { margin: .4rem 0; font-size: 2rem; font-weight: 700; color: #007e87; font-variant-numeric: tabular-nums; }
+.metric-note,.scope-note { color: #516779; font-size: .85rem; }
+.metric-note { margin: 0; } .scope-facts { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem 2rem; }
+.scope-facts div { border-bottom: 1px solid #dbe6e9; padding-bottom: .6rem; overflow-wrap: anywhere; }
+.scope-facts dt { font-size: .8rem; color: #516779; } .scope-facts dd { margin: .2rem 0 0; font-weight: 600; }
+.field-list { display: flex; flex-wrap: wrap; gap: .5rem; list-style: none; padding: 0; }
+.field-list li { padding: .3rem .6rem; background: #f0f4f6; border-radius: 4px; overflow-wrap: anywhere; }
+.client-footer { margin-top: 2rem; padding-top: .8rem; border-top: 1px solid #dbe6e9; color: #516779; font-size: .8rem; }
+@media(max-width: 600px) { .metric-grid,.scope-facts { grid-template-columns: 1fr 1fr; } .metric-value { font-size: 1.6rem; } }
+@media print { .metric-grid { grid-template-columns: repeat(4,minmax(0,1fr)); } .metric-card { break-inside: avoid; } }
+</style></head>
+<body>
+{% if not report.detailed %}
+{% include "webui/report_summary.html" %}
+{% else %}
+<h1>Evaluation report</h1><p>{{ report.dataset_name }} · {{ report.run_key }}</p>
+{% if report.placeholder %}<p class="notice">Placeholder baseline: these results do not describe the selected algorithm.</p>{% endif %}
+{% for section in report.sections %}
+<section><h2>{{ section.title }}</h2>
+<table><caption>{{ section.title }}</caption><thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+<tbody>{% for key,value in section.rows %}<tr><th scope="row">{{ key }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody></table></section>
+{% endfor %}
+<section><h2>Column profile</h2><table><caption>Inferred column types and missing values</caption>
+<thead><tr><th scope="col">Column</th><th scope="col">Type</th><th scope="col">Missing count</th><th scope="col">Missing %</th></tr></thead>
+<tbody>{% for row in report.profile %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></section>
+<section><h2>Evaluation metrics</h2><p>Displayed values match the comparison table. Full stored values are also included.</p>
+<table><caption>All computed evaluation metrics</caption><thead><tr><th scope="col">Metric</th><th scope="col">Displayed</th><th scope="col">Stored value</th></tr></thead>
+<tbody>{% for metric in report.metrics %}<tr><th scope="row">{{ metric.label }}</th><td>{{ metric.display }}</td><td>{{ metric.raw }}</td></tr>{% endfor %}</tbody></table></section>
+{% if report.task == "classification" %}<section><h2>Confusion matrix</h2>
+<p>Unlisted class pairs have count 0. Every non-zero count is listed below.</p>
+<p class="labels">Class labels: {% for label in report.labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+<table><caption>Confusion matrix counts</caption><thead><tr><th scope="col">Actual class</th><th scope="col">Predicted class</th><th scope="col">Count</th></tr></thead>
+<tbody>{% for actual,predicted,count in report.matrix_entries %}<tr><th scope="row">{{ actual }}</th><td>{{ predicted }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody></table></section>{% endif %}
+{% endif %}
+</body></html>

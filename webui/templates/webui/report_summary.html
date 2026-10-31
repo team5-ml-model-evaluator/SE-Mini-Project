@@ -1,0 +1,18 @@
+<header class="client-header"><span>MODEL EVALUATOR</span><span>Client summary</span></header>
+<main>
+<h1 class="client-title">Evaluation report</h1>
+<p class="client-model">{{ report.algorithm }} · {{ report.task|capfirst }}</p>
+{% if report.placeholder %}<p class="notice">Placeholder baseline: these results do not describe the selected algorithm.</p>{% endif %}
+<section class="metric-grid" aria-label="Model performance metrics">
+{% for metric in report.metrics %}<div class="metric-card"><h2>{{ metric.label }}</h2><p class="metric-value">{{ metric.display }}</p><p class="metric-note">{{ metric.description }}</p></div>{% endfor %}
+</section>
+<p class="scope-note">Scores describe held-out evaluation data. {% if report.task == "classification" %}Higher is better. Precision, recall and F1-score are weighted across classes.{% else %}Lower errors are better; higher R² is better. MSE uses squared target units.{% endif %}</p>
+<section><h2>Evaluation scope</h2><dl class="scope-facts">{% for key,value in report.facts %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></section>
+{% if report.features != None %}<section><h2>Fields used</h2><ul class="field-list">{% for field in report.features %}<li>{{ field }}</li>{% empty %}<li>No input fields</li>{% endfor %}</ul></section>{% endif %}
+{% if report.breakdown %}<section><h2>Prediction breakdown</h2>
+<table><caption>Rows show actual outcomes; columns show predicted outcomes. Values are record counts.</caption>
+<thead><tr><th scope="col">Actual / predicted</th>{% for label in report.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+<tbody>{% for row in report.breakdown %}<tr><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></section>
+{% elif report.task == "classification" %}<p class="scope-note">The full class-by-class breakdown is available in the optional technical report.</p>{% endif %}
+</main>
+<footer class="client-footer">Prepared from a completed model evaluation.</footer>

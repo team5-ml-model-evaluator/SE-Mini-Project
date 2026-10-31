@@ -1,5 +1,5 @@
 {% extends "webui/base.html" %}
-{% load static %}
+{% load static metric_format %}
 {% block title %}Run {{ run.job_key }}{% endblock %}
 {% block head %}{% if active %}<noscript><meta http-equiv="refresh" content="5"></noscript>
 <script src="{% static 'webui/run.js' %}" defer></script>{% endif %}{% endblock %}
@@ -28,6 +28,17 @@
 {% endif %}
 
 {% if run.state == "Completed" %}
+<div class="d-flex flex-wrap gap-2 mb-3" role="group" aria-label="Evaluation report downloads">
+  <a class="btn btn-outline-secondary" href="{% url 'run_report' job_key=run.job_key format='pdf' %}">Download PDF report</a>
+  <a class="btn btn-outline-secondary" href="{% url 'run_report' job_key=run.job_key format='html' %}">Download HTML report</a>
+</div>
+<details class="mb-3">
+  <summary>Technical report (optional)</summary>
+  <p class="mt-2 mb-2">Includes preprocessing, model parameters and complete evaluation details.</p>
+  <a href="{% url 'run_report' job_key=run.job_key format='pdf' %}?details=1">Download technical PDF</a>
+  <span aria-hidden="true"> · </span>
+  <a href="{% url 'run_report' job_key=run.job_key format='html' %}?details=1">Download technical HTML</a>
+</details>
 {% if result.standin %}
 <div class="alert alert-info" role="note">
   <h2 class="h6">Placeholder results</h2>
@@ -43,10 +54,10 @@
     <caption>Precision, recall and F1-score are averaged over the classes, weighted by how many rows each class has.</caption>
     <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
     <tbody>
-      <tr><th scope="row">Accuracy</th><td class="num">{{ result.accuracy|floatformat:4 }}</td></tr>
-      <tr><th scope="row">Precision</th><td class="num">{{ result.precision|floatformat:4 }}</td></tr>
-      <tr><th scope="row">Recall</th><td class="num">{{ result.recall|floatformat:4 }}</td></tr>
-      <tr><th scope="row">F1-score</th><td class="num">{{ result.f1_score|floatformat:4 }}</td></tr>
+      <tr><th scope="row">Accuracy</th><td class="num">{{ result.accuracy|metric_display:"classification" }}</td></tr>
+      <tr><th scope="row">Precision</th><td class="num">{{ result.precision|metric_display:"classification" }}</td></tr>
+      <tr><th scope="row">Recall</th><td class="num">{{ result.recall|metric_display:"classification" }}</td></tr>
+      <tr><th scope="row">F1-score</th><td class="num">{{ result.f1_score|metric_display:"classification" }}</td></tr>
     </tbody>
   </table>
   </div>
@@ -87,10 +98,10 @@
     <caption>Errors are in the units of the target column. Lower is better for MAE, MSE and RMSE; higher is better for R&sup2;.</caption>
     <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
     <tbody>
-      <tr><th scope="row">MAE (mean absolute error)</th><td class="num">{{ result.mae|floatformat:4 }}</td></tr>
-      <tr><th scope="row">MSE (mean squared error)</th><td class="num">{{ result.mse|floatformat:4 }}</td></tr>
-      <tr><th scope="row">RMSE (root mean squared error)</th><td class="num">{{ result.rmse|floatformat:4 }}</td></tr>
-      <tr><th scope="row">R&sup2; (coefficient of determination)</th><td class="num">{{ result.r2|floatformat:4 }}</td></tr>
+      <tr><th scope="row">MAE (mean absolute error)</th><td class="num">{{ result.mae|metric_display:"regression" }}</td></tr>
+      <tr><th scope="row">MSE (mean squared error)</th><td class="num">{{ result.mse|metric_display:"regression" }}</td></tr>
+      <tr><th scope="row">RMSE (root mean squared error)</th><td class="num">{{ result.rmse|metric_display:"regression" }}</td></tr>
+      <tr><th scope="row">R&sup2; (coefficient of determination)</th><td class="num">{{ result.r2|metric_display:"regression" }}</td></tr>
     </tbody>
   </table>
   </div>
