@@ -229,7 +229,7 @@ class ResultsTests(RunTestCase):
         self.assertEqual(run.state, "Completed")
         html = self.page(run)
         for name in ("Accuracy", "Precision", "Recall", "F1-score"):
-            self.assertRegex(html, rf'<th scope="row">{name}</th><td class="num">\d\.\d{{4}}</td>')
+            self.assertRegex(html, rf'<th scope="row">{name}</th><td class="num">\d{{1,3}}\.\d{{2}}%</td>')
 
     def test_confusion_matrix_is_a_table_with_labelled_axes_and_matching_totals(self):
         _, run, _ = self.start()
@@ -252,7 +252,7 @@ class ResultsTests(RunTestCase):
         self.assertEqual(run.state, "Completed", run.error)
         html = self.page(run)
         for name in ("MAE", "MSE", "RMSE", "R&sup2;"):
-            self.assertRegex(html, rf'<th scope="row">{name} [^<]*</th><td class="num">-?\d+\.\d{{4}}</td>')
+            self.assertRegex(html, rf'<th scope="row">{name} [^<]*</th><td class="num">-?\d+\.\d{{2}}</td>')
         self.assertNotIn("Confusion matrix", html)
         self.assertAlmostEqual(run.result["rmse"] ** 2, run.result["mse"], places=6)
 

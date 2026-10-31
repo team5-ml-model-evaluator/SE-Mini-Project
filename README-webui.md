@@ -66,3 +66,41 @@ its non-missing rows distinct is rejected with guidance to choose regression or
 a categorical target. This heuristic allows numeric category codes such as 0/1.
 The start-run endpoint repeats the check for previously saved drafts.
 Run its tests with `python manage.py test webui.test_target_validation`.
+
+## Evaluation reports and comparison CSV (#21)
+
+Completed run pages offer **Download PDF report** and **Download HTML report**.
+The default client report uses a compact scorecard: model, prediction target,
+dataset and evaluation sizes, input fields, formatted performance metrics, and a
+small prediction-breakdown table when there are six or fewer classes. Internal
+IDs, timestamps and training configuration are omitted from this client summary.
+
+Expand **Technical report (optional)** for full PDF/HTML downloads, including
+column profiles, excluded columns, split/seed, requested and effective
+preprocessing and hyperparameters, full stored metric precision, and complete
+classification matrix counts. These downloads use `?details=1`; default links
+remain client summaries. Both variants use the same authorization checks.
+Technical field lists use readable names and show **None** when no fields are
+excluded; absent historical configuration remains **Not recorded for this run**.
+
+The comparison page offers **Download comparison CSV** for exactly the selected
+runs in the displayed order. Each score column names the model and run key,
+for example `Decision Tree (r-example)`. Classification metrics use two-decimal percentages;
+regression metrics use two-decimal numeric values. Run pages use the same score
+formatting. Class inventories and sparse
+matrix counts follow the metric rows. Unlisted class pairs have count zero.
+
+Reports and CSV require sign-in and server-side ownership checks. Unfinished or
+invalid results cannot be exported. User-controlled CSV labels are protected
+against spreadsheet formulas. The HTML file is self-contained and printable.
+The PDF uses an embedded font; unsupported glyphs are preserved as explicit
+Unicode escapes with an explanatory note rather than silently replaced.
+
+New runs save their effective preprocessing and estimator hyperparameters in
+`Run.result.execution`. Older runs label absent metadata **Not recorded for this
+run**. They are not retroactively assigned current defaults. Excluded columns can
+be derived from recorded features, and this derivation is labelled in the report.
+
+Install with `pip install -r requirements-webui.txt`; ReportLab generates PDFs,
+and pypdf validates PDF content in tests. No database migration is needed.
+Run focused tests with `python manage.py test webui.test_reports`.

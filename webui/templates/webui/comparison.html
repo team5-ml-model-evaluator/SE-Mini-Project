@@ -32,6 +32,7 @@
 {% if comparison %}
 <section aria-labelledby="comparison-title">
   <h2 id="comparison-title">{{ comparison.task|capfirst }} comparison</h2>
+  <a class="btn btn-outline-secondary mb-3" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a>
   <p>Target: <strong class="mono">{{ comparison.target }}</strong>. Saved evaluation results are displayed {% if comparison.task == "classification" %}as percentages {% endif %}to two decimal places.</p>
   <p>{% if comparison.task == "classification" %}Higher is better for these metrics. Precision, recall and F1-score use class-frequency weighted averages.{% else %}Lower is better for MAE, MSE and RMSE; higher is better for R².{% endif %} Different features, preprocessing or train/test splits can affect comparability; review each run's settings before drawing conclusions.</p>
   <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Run comparison, scroll horizontally to see every run">
