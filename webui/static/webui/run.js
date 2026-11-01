@@ -4,6 +4,7 @@
   if (!live || live.dataset.active !== "true") { return; }
   var url = live.dataset.statusUrl;
   var state = live.dataset.state;
+  var stopped = false;
   var elapsed = live.dataset.elapsed === "" ? null : parseFloat(live.dataset.elapsed);
   var polledAt = Date.now();
   var stateText = document.getElementById("state-text");
@@ -25,11 +26,19 @@
     }
   }
   function poll() {
-    fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
+    if (stopped) { return; }
+    return fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
       .then(function (d) {
+        if (stopped) { return; }
         note.hidden = true;
-        if (d.state === "Completed" || d.state === "Failed") { window.location.reload(); return; }
+        if (d.state === "Completed" || d.state === "Failed") {
+          stopped = true;
+          clearInterval(paintTimer);
+          clearInterval(pollTimer);
+          window.modelEvaluatorRefresh();
+          return;
+        }
         if (d.state !== state) {
           state = d.state;
           stateText.textContent = state;
@@ -40,9 +49,9 @@
         polledAt = Date.now();
         paint();
       })
-      .catch(function () { note.hidden = false; });
+      .catch(function () { if (!stopped) { note.hidden = false; } });
   }
   paint();
-  setInterval(paint, 1000);
-  setInterval(poll, 3000);
+  var paintTimer = setInterval(paint, 1000);
+  var pollTimer = setInterval(poll, 3000);
 })();

@@ -10,7 +10,7 @@
     <div class="target-field">
       <label class="form-label" for="{{ form.target.id_for_label }}">{{ form.target.label }}</label>
       {{ form.target }}
-      {% for error in form.target.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% if form.target.errors %}<div id="{{ form.target.auto_id }}_error">{% for error in form.target.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>{% endif %}
     </div>
   </div>
   <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Columns, scrollable">
@@ -19,16 +19,17 @@
     <thead><tr><th scope="col">Column</th><th scope="col">Type</th><th scope="col">Use as</th></tr></thead>
     <tbody>
     {% for row in form.role_rows %}
-    <tr>
+    <tr data-column="{{ row.name }}">
       <th scope="row">{{ row.name }}</th>
       <td>{% for c in dataset.profile.columns %}{% if c.name == row.name %}{% include "webui/_dtype.html" with dtype=c.dtype %}{% endif %}{% endfor %}</td>
       <td>
         <fieldset>
           <legend class="visually-hidden">Use {{ row.name }} as</legend>
-          <div class="segmented">
+          <p class="target-note" data-target-note{% if form.target.value != row.name %} hidden{% endif %}>Target. The model predicts this column. It is never used as a feature.</p>
+          <div class="segmented" data-role-control{% if form.target.value == row.name %} hidden{% endif %}>
           {% for radio in row.field %}{{ radio.tag }}<label class="btn" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>{% endfor %}
           </div>
-          {% for error in row.field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          {% if row.field.errors %}<div id="{{ row.field.auto_id }}_error">{% for error in row.field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>{% endif %}
         </fieldset>
       </td>
     </tr>

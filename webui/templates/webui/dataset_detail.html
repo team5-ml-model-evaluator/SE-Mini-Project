@@ -20,4 +20,10 @@
 </div>
 <a class="btn btn-primary" href="{% url 'pipeline_step' dataset.id %}">Continue to pipeline</a>
 <a class="btn btn-outline-secondary" href="{% url 'run_comparison' dataset.id %}">Compare completed runs</a>
+{% if recent_batches %}
+<section class="panel mt-4" aria-labelledby="recent-evaluations-title">
+  <h2 id="recent-evaluations-title" class="h5">Recent model evaluations</h2>
+  <ul class="mb-0">{% for batch in recent_batches %}<li><a href="{% url 'batch_detail' batch.id %}">{{ batch.task|capfirst }} comparison · {{ batch.created_at|date:"Y-m-d H:i" }} UTC</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
 {% endblock %}

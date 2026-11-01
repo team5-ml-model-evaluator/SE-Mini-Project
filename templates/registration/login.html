@@ -10,9 +10,9 @@
 <form method="post" novalidate class="panel">
   {% csrf_token %}
   <div class="mb-3"><label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
-    <input class="form-control" type="text" name="username" id="{{ form.username.id_for_label }}" autocomplete="username" required></div>
+    <input class="form-control" type="text" name="username" id="{{ form.username.id_for_label }}" autocomplete="username"{% if form.errors %} aria-invalid="true" aria-describedby="error-summary"{% endif %} required></div>
   <div class="mb-4"><label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
-    <input class="form-control" type="password" name="password" id="{{ form.password.id_for_label }}" autocomplete="current-password" required></div>
+    <input class="form-control" type="password" name="password" id="{{ form.password.id_for_label }}" autocomplete="current-password"{% if form.errors %} aria-invalid="true" aria-describedby="error-summary"{% endif %} required></div>
   <input type="hidden" name="next" value="{{ next }}">
   <button type="submit" class="btn btn-primary w-100">Log in</button>
 </form>

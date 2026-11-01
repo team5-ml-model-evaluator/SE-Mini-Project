@@ -137,6 +137,19 @@ class ModelForm(forms.Form):
 def error_summary(form):
     """List of (anchor id, message) for the error summary shown above a form."""
     items = []
+    # Explicit help descriptions (such as algorithm-help) must also include errors.
+    for name in form.errors:
+        described = "target" if name == "__all__" and "target" in form.fields else name
+        if described in form.fields:
+            bound = form[described]
+            attrs = bound.field.widget.attrs
+            descriptions = attrs.get("aria-describedby", "").split()
+            error_id = "error-summary" if name == "__all__" else f"{bound.auto_id}_error"
+            if error_id not in descriptions:
+                descriptions.append(error_id)
+            if descriptions:
+                attrs["aria-describedby"] = " ".join(descriptions)
+            attrs["aria-invalid"] = "true"
     for name, errors in form.errors.items():
         if name == "__all__":
             anchor = form["target"].auto_id if "target" in form.fields else None

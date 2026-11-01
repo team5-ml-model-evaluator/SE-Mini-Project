@@ -9,14 +9,16 @@ from django.template.loader import render_to_string
 from django.views.decorators.http import require_GET, require_POST
 
 from .comparison import build_comparison
-from .matrices import matrix_window
-from .target_validation import validate_classification_target
+from . import batches
+from .charts import comparison_chart
 from .forms import ComparisonForm, ModelForm, PipelineForm, UploadForm, error_summary
-from .models import Dataset, Run
+from .matrices import matrix_window
+from .models import Dataset, Run, RunBatch
 from .reporting import build_report, comparison_csv, report_pdf
 from .stages import stage_list
 from .standins import runs
 from .standins.catalogue import BY_KEY
+from .target_validation import validate_classification_target
 
 
 def _owned_dataset(request, pk):
@@ -64,7 +66,8 @@ def dataset_new(request):
 @login_required
 def dataset_detail(request, pk):
     dataset = _owned_dataset(request, pk)
-    return _page(request, "dataset_detail.html", "dataset", dataset=dataset)
+    return _page(request, "dataset_detail.html", "dataset", dataset=dataset,
+                 recent_batches=dataset.run_batches.filter(owner=request.user)[:5])
 
 
 @login_required
@@ -118,9 +121,15 @@ def settings_summary(request, pk):
     if not draft or "algorithm" not in draft:
         messages.error(request, "Choose an algorithm before reviewing the settings.")
         return redirect("model_step", pk=dataset.id)
-    return _page(
-        request, "summary.html", "model", dataset=dataset, draft=draft, algorithm=BY_KEY[draft["algorithm"]]
-    )
+    return _summary_page(request, dataset, draft)
+
+
+def _summary_page(request, dataset, draft):
+    config = _run_config(dataset, draft)
+    algorithms = batches.suitable_algorithms(config)
+    return _page(request, "summary.html", "model", dataset=dataset, draft=draft,
+                 algorithm=BY_KEY[draft["algorithm"]], suitable_count=len(algorithms),
+                 batch_token=batches.batch_token(request.user, dataset, config))
 
 
 def _run_config(dataset, draft):
@@ -158,6 +167,59 @@ def start_run(request, pk):
     return redirect("run_detail", job_key=job_key)
 
 
+@login_required
+@require_POST
+def start_batch(request, pk):
+    dataset = _owned_dataset(request, pk)
+    draft = request.session.get(_draft_key(dataset))
+    if not draft or not draft.get("target_column") or draft.get("algorithm") not in BY_KEY:
+        messages.error(request, "Choose the target, features and algorithm before running all models.")
+        return redirect("pipeline_step", pk=dataset.id)
+    try:
+        batch = batches.start_batch(request.user, dataset, _run_config(dataset, draft), request.POST.get("batch_token"))
+    except ValidationError as exc:
+        for message in exc.messages:
+            messages.error(request, message)
+        response = _summary_page(request, dataset, draft)
+        response.status_code = 400
+        return response
+    return redirect("batch_detail", pk=batch.pk)
+
+
+def _owned_batch(request, pk):
+    batch = get_object_or_404(RunBatch.objects.select_related("dataset"), pk=pk)
+    if batch.owner_id != request.user.id or batch.dataset.owner_id != request.user.id:
+        raise PermissionDenied
+    return batch
+
+
+@login_required
+@require_GET
+def batch_detail(request, pk):
+    batch = _owned_batch(request, pk)
+    status = batches.get_batch_status(batch)
+    comparison, comparison_error = None, None
+    completed = list(batch.runs.filter(state=Run.COMPLETED).select_related("dataset").order_by("pk"))
+    if len(completed) >= 2:
+        try:
+            comparison = build_comparison(completed)
+        except ValidationError:
+            comparison_error = "Some saved results could not be compared. Open each completed run to review its results."
+    return _page(request, "batch.html", "run" if status["active"] else "results", batch=batch,
+                 dataset=batch.dataset, status=status, comparison=comparison, comparison_error=comparison_error,
+                 chart=comparison_chart(comparison, request.GET.get("metric")))
+
+
+@require_GET
+def batch_status(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Sign in to see this evaluation."}, status=401)
+    batch = _owned_batch(request, pk)
+    response = JsonResponse(batches.get_batch_status(batch))
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 def _owned_run(request, job_key):
     run = get_object_or_404(Run.objects.defer("result"), job_key=job_key)
     if run.owner_id != request.user.id:
@@ -171,6 +233,73 @@ def _clock(seconds):
         return "00:00"
     seconds = int(seconds)
     return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+
+def _comparison_selection(request, dataset, submitted):
+    form = ComparisonForm(request.GET if submitted else None, owner=request.user, dataset=dataset)
+    comparison = None
+    if submitted and form.is_valid():
+        by_key = {run.job_key: run for run in form.cleaned_data["runs"]}
+        # Keep the submitted column order and remove repeated keys.
+        selected = [by_key[key] for key in dict.fromkeys(request.GET.getlist("runs"))]
+        try:
+            comparison = build_comparison(selected)
+        except ValidationError as exc:
+            form.add_error("runs", exc)
+    return form, comparison
+
+
+@login_required
+@require_GET
+def run_comparison(request, pk):
+    dataset = _owned_dataset(request, pk)
+    submitted = "compare" in request.GET or "runs" in request.GET
+    form, comparison = _comparison_selection(request, dataset, submitted)
+    return _page(request, "comparison.html", "results", dataset=dataset, form=form,
+                 comparison=comparison, has_runs=form.fields["runs"].queryset.exists(),
+                 chart=comparison_chart(comparison, request.GET.get("metric")))
+
+
+def _download(content, content_type, filename):
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@login_required
+@require_GET
+def run_report(request, job_key, format):
+    if format not in {"html", "pdf"}:
+        raise Http404
+    run = _owned_run(request, job_key)
+    _owned_dataset(request, run.dataset_id)
+    try:
+        report = build_report(run, detailed=request.GET.get("details") == "1")
+    except ValidationError as exc:
+        return HttpResponse(" ".join(exc.messages), status=409, content_type="text/plain; charset=utf-8")
+    variant = "-technical" if report["detailed"] else ""
+    filename = f"evaluation-{run.pk}{variant}.{format}"
+    if format == "pdf":
+        return _download(report_pdf(report), "application/pdf", filename)
+    html = render_to_string("webui/report.html", {"report": report})
+    response = _download(html, "text/html; charset=utf-8", filename)
+    response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    return response
+
+
+@login_required
+@require_GET
+def run_comparison_csv(request, pk):
+    dataset = _owned_dataset(request, pk)
+    form, comparison = _comparison_selection(request, dataset, True)
+    if comparison is None:
+        response = _page(request, "comparison.html", "results", dataset=dataset, form=form,
+                         comparison=None, has_runs=form.fields["runs"].queryset.exists())
+        response.status_code = 400
+        return response
+    return _download(comparison_csv(comparison), "text/csv; charset=utf-8", f"comparison-{dataset.id}.csv")
 
 
 @login_required
@@ -203,71 +332,3 @@ def run_status(request, job_key):
     response = JsonResponse(runs.get_status(run))
     response["Cache-Control"] = "no-store"
     return response
-
-
-def _comparison_selection(request, dataset, submitted):
-    form = ComparisonForm(request.GET if submitted else None, owner=request.user, dataset=dataset)
-    comparison = None
-    if submitted and form.is_valid():
-        by_key = {run.job_key: run for run in form.cleaned_data["runs"]}
-        # Keep the submitted column order and remove repeated keys.
-        selected = [by_key[key] for key in dict.fromkeys(request.GET.getlist("runs"))]
-        try:
-            comparison = build_comparison(selected)
-        except ValidationError as exc:
-            form.add_error("runs", exc)
-    return form, comparison
-
-
-@login_required
-@require_GET
-def run_comparison(request, pk):
-    dataset = _owned_dataset(request, pk)
-    submitted = "compare" in request.GET or "runs" in request.GET
-    form, comparison = _comparison_selection(request, dataset, submitted)
-    return _page(request, "comparison.html", "results", dataset=dataset, form=form,
-                 comparison=comparison, has_runs=form.fields["runs"].queryset.exists())
-
-
-def _download(content, content_type, filename):
-    response = HttpResponse(content, content_type=content_type)
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    response["Cache-Control"] = "private, no-store"
-    response["X-Content-Type-Options"] = "nosniff"
-    return response
-
-
-
-@login_required
-@require_GET
-def run_report(request, job_key, format):
-    if format not in {"html", "pdf"}:
-        raise Http404
-    run = _owned_run(request, job_key)
-    _owned_dataset(request, run.dataset_id)
-    try:
-        report = build_report(run, detailed=request.GET.get("details") == "1")
-    except ValidationError as exc:
-        return HttpResponse(" ".join(exc.messages), status=409, content_type="text/plain; charset=utf-8")
-    variant = "-technical" if report["detailed"] else ""
-    filename = f"evaluation-{run.pk}{variant}.{format}"
-    if format == "pdf":
-        return _download(report_pdf(report), "application/pdf", filename)
-    html = render_to_string("webui/report.html", {"report": report})
-    response = _download(html, "text/html; charset=utf-8", filename)
-    response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
-    return response
-
-
-
-@login_required
-@require_GET
-def run_comparison_csv(request, pk):
-    dataset = _owned_dataset(request, pk)
-    form, comparison = _comparison_selection(request, dataset, True)
-    if comparison is None:
-        response = _page(request, "comparison.html", "results", dataset=dataset, form=form,
-                         comparison=None, has_runs=form.fields["runs"].queryset.exists())
-        response.status_code = 400
-        return response
-    return _download(comparison_csv(comparison), "text/csv; charset=utf-8", f"comparison-{dataset.id}.csv")
