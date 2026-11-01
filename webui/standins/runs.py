@@ -204,6 +204,7 @@ def _train_and_score(run):
         )
         return {
             "task": "classification",
+            "execution": _execution_details(res["model"]),
             "standin": False,
             "test_rows": len(y_test),
             "accuracy": float(metrics["accuracy"]),
@@ -231,6 +232,7 @@ def _train_and_score(run):
         )
         return {
             "task": "regression",
+            "execution": _execution_details(res["model"]),
             "standin": False,
             "test_rows": len(y_test),
             "mae": float(metrics["mae"]),
@@ -305,4 +307,16 @@ def _regression(target, train, test):
         "task": "regression", "standin": True, "test_rows": len(y_test),
         "mae": sum(abs(e) for e in errors) / len(errors), "mse": mse, "rmse": mse ** 0.5,
         "r2": 1 - (sum(e * e for e in errors) / ss_tot) if ss_tot else 0.0,
+    }
+
+
+def _execution_details(model):
+    """Snapshot the effective settings for reports without changing the run interface."""
+    return {
+        "preprocessing": {
+            "imputation": "Numeric missing values: training-set median, or 0 for an entirely missing training column",
+            "encoding": "One-hot encoding (drop_first=True, dummy_na=False)",
+            "scaling": "None",
+        },
+        "hyperparameters": model.get_params(deep=False),
     }

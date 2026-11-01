@@ -3,8 +3,9 @@ import os
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.views.decorators.http import require_GET, require_POST
 
 from .comparison import build_comparison
@@ -12,6 +13,7 @@ from .matrices import matrix_window
 from .target_validation import validate_classification_target
 from .forms import ComparisonForm, ModelForm, PipelineForm, UploadForm, error_summary
 from .models import Dataset, Run
+from .reporting import build_report, comparison_csv, report_pdf
 from .stages import stage_list
 from .standins import runs
 from .standins.catalogue import BY_KEY
@@ -225,3 +227,47 @@ def run_comparison(request, pk):
     form, comparison = _comparison_selection(request, dataset, submitted)
     return _page(request, "comparison.html", "results", dataset=dataset, form=form,
                  comparison=comparison, has_runs=form.fields["runs"].queryset.exists())
+
+
+def _download(content, content_type, filename):
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+
+@login_required
+@require_GET
+def run_report(request, job_key, format):
+    if format not in {"html", "pdf"}:
+        raise Http404
+    run = _owned_run(request, job_key)
+    _owned_dataset(request, run.dataset_id)
+    try:
+        report = build_report(run, detailed=request.GET.get("details") == "1")
+    except ValidationError as exc:
+        return HttpResponse(" ".join(exc.messages), status=409, content_type="text/plain; charset=utf-8")
+    variant = "-technical" if report["detailed"] else ""
+    filename = f"evaluation-{run.pk}{variant}.{format}"
+    if format == "pdf":
+        return _download(report_pdf(report), "application/pdf", filename)
+    html = render_to_string("webui/report.html", {"report": report})
+    response = _download(html, "text/html; charset=utf-8", filename)
+    response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    return response
+
+
+
+@login_required
+@require_GET
+def run_comparison_csv(request, pk):
+    dataset = _owned_dataset(request, pk)
+    form, comparison = _comparison_selection(request, dataset, True)
+    if comparison is None:
+        response = _page(request, "comparison.html", "results", dataset=dataset, form=form,
+                         comparison=None, has_runs=form.fields["runs"].queryset.exists())
+        response.status_code = 400
+        return response
+    return _download(comparison_csv(comparison), "text/csv; charset=utf-8", f"comparison-{dataset.id}.csv")
