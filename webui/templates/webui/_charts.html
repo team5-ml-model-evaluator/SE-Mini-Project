@@ -1,0 +1,19 @@
+{% if chart %}
+<section class="panel" aria-labelledby="chart-title">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div><h2 id="chart-title" class="h5">Comparison chart</h2><p class="mb-2">{{ chart.label }} · {% if chart.higher %}Higher is better.{% else %}Lower is better.{% endif %}</p></div>
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+      {% if not batch %}{% for column in comparison.columns %}<input type="hidden" name="runs" value="{{ column.run.job_key }}">{% endfor %}{% endif %}
+      <div><label for="chart-metric" class="form-label">Metric</label><select name="metric" id="chart-metric" class="form-select">{% for key,label in chart.choices %}<option value="{{ key }}"{% if chart.metric == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+      <button type="submit" class="btn btn-outline-secondary">Update chart</button>
+    </form>
+  </div>
+  <p class="chart-leader">{% if status.active %}Current best{% elif chart.tied %}Joint best{% else %}Best{% endif %} on {{ chart.label }}: <strong>{{ chart.leaders }}</strong> · {{ chart.best_display }}</p>
+  <div class="comparison-bars" role="img" aria-describedby="comparison-values" aria-label="{{ chart.label }} by model. {% for bar in chart.bars %}{{ bar.label }}: {{ bar.display }}. {% endfor %}Exact displayed values are also in the numeric comparison table.">
+    {% for bar in chart.bars %}<div class="comparison-bar-row">
+      <div class="comparison-bar-label">{{ bar.label }}</div><div class="comparison-bar-track"><span class="comparison-bar-zero" style="left:{{ chart.zero }}%"></span><span class="comparison-bar-fill" style="left:{{ bar.left }}%;width:{{ bar.width }}%"></span></div><div class="comparison-bar-value">{{ bar.display }}</div>
+    </div>{% endfor %}
+  </div>
+  <p class="small mb-0 mt-3">Only completed models are shown. Scores are rounded to two decimals; model ranking uses full stored precision.</p>
+</section>
+{% endif %}

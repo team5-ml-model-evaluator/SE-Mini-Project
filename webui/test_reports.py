@@ -331,13 +331,19 @@ class ReportTests(WebUITestCase):
                 self.assertNotContains(response, '5.7358</td>')
 
     def test_failed_run_has_no_report_links_and_rejects_all_report_variants(self):
-        Run.objects.filter(pk=self.run.pk).update(state=Run.FAILED, error='Training could not finish.')
+        from .models import RunBatch
+        batch = RunBatch.objects.create(owner=self.user, dataset=self.dataset, task='classification',
+                                        run_config=self.config, active=False)
+        Run.objects.filter(pk=self.run.pk).update(state=Run.FAILED, error='Training could not finish.', batch=batch)
         run_page = self.client.get(reverse('run_detail', args=[self.run.job_key]))
+        dashboard = self.client.get(reverse('batch_detail', args=[batch.pk]))
         for format in ['html', 'pdf']:
             for detailed in [False, True]:
                 url = self.report_url(format, detailed=detailed)
                 self.assertEqual(self.client.get(url).status_code, 409)
                 self.assertNotContains(run_page, url)
+                self.assertNotContains(dashboard, url)
+        self.assertContains(dashboard, 'Training could not finish.')
 
     def test_run_metric_formatting_does_not_turn_missing_scores_into_zero(self):
         from .templatetags.metric_format import metric_display
