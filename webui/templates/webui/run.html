@@ -4,6 +4,7 @@
 {% block head %}{% if active %}<noscript><meta http-equiv="refresh" content="5"></noscript>
 <script src="{% static 'webui/run.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
+{% include "webui/_results_update.html" %}
 <h1>Training run</h1>
 <p class="lede">{{ algorithm.label }} ({{ algorithm.task }}) on {{ run.dataset.original_name }}, predicting <strong class="mono">{{ run.run_config.target_column }}</strong>. Run key <span class="mono">{{ run.job_key }}</span>.</p>
 
@@ -51,7 +52,7 @@
   <h2 id="metrics-title" class="h5">Classification metrics</h2>
   <div class="table-wrap" tabindex="0" role="region" aria-label="Classification metrics, scrollable">
   <table class="table">
-    <caption>Precision, recall and F1-score are averaged over the classes, weighted by how many rows each class has.</caption>
+    <caption>Accuracy is the share of held-out predictions that were correct. Precision, recall and F1-score are averaged over the classes, weighted by how many rows each class has.</caption>
     <thead><tr><th scope="col">Metric</th><th scope="col" class="num">Value</th></tr></thead>
     <tbody>
       <tr><th scope="row">Accuracy</th><td class="num">{{ result.accuracy|metric_display:"classification" }}</td></tr>

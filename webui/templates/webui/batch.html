@@ -1,0 +1,31 @@
+{% extends "webui/base.html" %}
+{% load static %}
+{% block title %}Model comparison dashboard{% endblock %}
+{% block head %}{% if status.active %}<noscript><meta http-equiv="refresh" content="3"></noscript><script src="{% static 'webui/batch.js' %}" defer></script>{% endif %}{% endblock %}
+{% block content %}
+{% include "webui/_results_update.html" %}
+<h1>Model comparison dashboard</h1>
+<p class="lede">{{ dataset.original_name }} · predicting <strong class="mono">{{ batch.run_config.target_column }}</strong> · {{ batch.task|capfirst }}. Every model uses the same input fields, split and random seed.</p>
+<section class="panel" id="batch-live" data-status-url="{% url 'batch_status' batch.id %}" data-version="{{ status.version }}" aria-labelledby="progress-title">
+  <h2 id="progress-title" class="h5">Evaluation progress</h2>
+  <p role="status">{{ status.finished }} of {{ status.total }} models finished · {{ status.completed }} completed{% if status.failed %} · {{ status.failed }} failed{% endif %}</p>
+  <progress value="{{ status.finished }}" max="{{ status.total }}" aria-label="Finished models" class="batch-progress">{{ status.finished }} of {{ status.total }}</progress>
+  <p id="batch-refresh-note" class="text-danger fw-semibold" role="status" hidden>Status could not be refreshed. Last known results are shown.</p>
+  <div class="table-wrap mt-3" tabindex="0" role="region" aria-label="Model progress, scrollable"><table class="table">
+    <caption>Individual model progress and results</caption><thead><tr><th scope="col">Model</th><th scope="col">Status</th><th scope="col">Elapsed</th><th scope="col">Results</th></tr></thead>
+    <tbody>{% for job in status.jobs %}<tr><th scope="row">{{ job.algorithm }}</th><td>{{ job.state }}{% if job.error %}<p class="text-danger mb-0">{{ job.error }}</p>{% endif %}</td><td><span id="elapsed-{{ job.key }}">{{ job.elapsed_s|default_if_none:"—" }}</span>{% if job.elapsed_s != None %} s{% endif %}</td><td><a href="{% url 'run_detail' job.key %}">Open run</a>{% if job.state == "Completed" %} · <a href="{% url 'run_report' job_key=job.key format='pdf' %}" aria-label="Download PDF report for {{ job.algorithm }}">PDF report</a>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% if comparison_error %}<p class="alert alert-danger" role="alert">{{ comparison_error }}</p>{% endif %}
+{% if comparison %}
+{% include "webui/_charts.html" %}
+<section aria-labelledby="numeric-title"><h2 id="numeric-title">Numeric comparison</h2>
+<p><a class="btn btn-outline-secondary" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a></p>
+<div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Numeric model comparison, scrollable"><table class="table" id="comparison-values">
+<caption>Stored evaluation scores for completed models</caption><thead><tr><th scope="col">Metric</th>{% for column in comparison.columns %}<th scope="col"><a href="{% url 'run_detail' column.run.job_key %}">{{ column.algorithm.label }}</a></th>{% endfor %}</tr></thead>
+<tbody>{% for row in comparison.rows %}<tr><th scope="row">{{ row.label }}</th>{% for value in row.display_values %}<td class="num">{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table></div></section>
+{% elif not comparison_error %}<p class="panel">Waiting for at least two completed models to compare.{% if not status.active %} Open the individual runs to review their results or failure reasons.{% endif %}</p>{% endif %}
+<a class="btn btn-outline-secondary" href="{% url 'dataset_detail' dataset.id %}">Back to dataset</a>
+<a class="btn btn-outline-secondary" href="{% url 'settings_summary' dataset.id %}">Review settings</a>
+{% endblock %}

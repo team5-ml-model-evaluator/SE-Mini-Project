@@ -191,6 +191,20 @@ class PipelineFormTests(WebUITestCase):
         self.assertRegex(html, r'<option value="bought" selected>')
         self.assertRegex(html, r'value="excluded"[^>]*id="id_role_1_1"[^>]*checked|id="id_role_1_1"[^>]*checked')
 
+    def test_target_column_is_labelled_in_words_not_offered_as_a_feature(self):
+        self.post("bought", ("feature", "feature", "feature"))
+        page = self.client.get(self.url)
+        html = page.content.decode()
+        self.assertEqual(html.count("data-target-note>"), 1)
+        self.assertEqual(html.count("data-target-note hidden>"), 2)
+        self.assertContains(page, "The model predicts this column. It is never used as a feature.")
+        self.assertEqual(html.count("data-role-control hidden"), 1)
+
+    def test_no_column_is_marked_as_target_before_one_is_chosen(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertEqual(html.count("data-target-note hidden>"), 3)
+        self.assertEqual(html.count("data-role-control hidden"), 0)
+
 
 class ModelFormTests(WebUITestCase):
     def setUp(self):

@@ -5,20 +5,19 @@
 <p class="lede">Dataset: <a href="{% url 'dataset_detail' dataset.id %}">{{ dataset.original_name }}</a>. Select at least two runs with the same target column and task type. Different algorithms and preprocessing settings are allowed.</p>
 
 {% if form.errors %}
-<div class="alert alert-danger" role="alert">
+<div id="error-summary" class="alert alert-danger" role="alert" tabindex="-1">
   <h2 class="h6">Check your selection</h2>
-  {% for error in form.runs.errors %}<p class="mb-0">{{ error }}</p>{% endfor %}
+  <ul id="id_runs_error" class="mb-0">{% for error in form.runs.errors %}<li><a href="#run-selection">{{ error }}</a></li>{% endfor %}</ul>
 </div>
 {% endif %}
 
 {% if has_runs %}
 <form method="get" class="panel">
-  <fieldset aria-describedby="selection-help{% if form.errors %} selection-errors{% endif %}">
+  <fieldset id="run-selection" tabindex="-1" aria-describedby="selection-help{% if form.errors %} id_runs_error{% endif %}"{% if form.errors %} aria-invalid="true"{% endif %}>
     <legend class="h5">{{ form.runs.label }}</legend>
     <p id="selection-help">Select two or more. Only your completed runs for this dataset are listed.</p>
-    {% if form.errors %}<div id="selection-errors" class="text-danger">{% for error in form.runs.errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
     {% for checkbox in form.runs %}
-    <div class="d-flex align-items-baseline gap-2 mb-3">
+    <div class="run-choice d-flex align-items-baseline gap-2 mb-3">
       {{ checkbox.tag }}<label for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
     </div>
     {% endfor %}
@@ -26,17 +25,18 @@
   <button class="btn btn-primary" type="submit" name="compare" value="1">Compare selected runs</button>
 </form>
 {% else %}
-<div class="panel"><p class="mb-0">Complete at least two runs on this dataset to compare their results.</p></div>
+<div class="panel" id="run-selection" tabindex="-1"><p class="mb-0">Complete at least two runs on this dataset to compare their results.</p></div>
 {% endif %}
 
 {% if comparison %}
+{% include "webui/_charts.html" %}
 <section aria-labelledby="comparison-title">
   <h2 id="comparison-title">{{ comparison.task|capfirst }} comparison</h2>
   <a class="btn btn-outline-secondary mb-3" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a>
   <p>Target: <strong class="mono">{{ comparison.target }}</strong>. Saved evaluation results are displayed {% if comparison.task == "classification" %}as percentages {% endif %}to two decimal places.</p>
   <p>{% if comparison.task == "classification" %}Higher is better for these metrics. Precision, recall and F1-score use class-frequency weighted averages.{% else %}Lower is better for MAE, MSE and RMSE; higher is better for R².{% endif %} Different features, preprocessing or train/test splits can affect comparability; review each run's settings before drawing conclusions.</p>
   <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Run comparison, scroll horizontally to see every run">
-  <table class="table">
+  <table class="table" id="comparison-values">
     <caption>Completed runs on {{ dataset.original_name }}, predicting {{ comparison.target }}. Scroll horizontally for additional runs.</caption>
     <thead><tr><th scope="col">Metric</th>{% for column in comparison.columns %}
       <th scope="col"><a href="{% url 'run_detail' column.run.job_key %}">{{ column.run.job_key }}</a><br>{{ column.algorithm.label }}{% if column.run.result.standin %}<br><span>Placeholder baseline</span>{% endif %}</th>
