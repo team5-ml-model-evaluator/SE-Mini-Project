@@ -1,0 +1,70 @@
+{% extends "webui/base.html" %}
+{% block title %}Dataset Catalogue Administration{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+  <div>
+    <h1>Dataset Catalogue Administration</h1>
+    <p class="lede mb-0">Manage registered datasets across all user accounts (MLE-F-063).</p>
+  </div>
+  <a class="btn btn-secondary btn-sm" href="{% url 'dataset_list' %}">Back to My Datasets</a>
+</div>
+
+{% if datasets %}
+<div class="table-wrap" tabindex="0" role="region" aria-label="Dataset catalogue table, scrollable">
+  <table class="table table-hover align-middle">
+    <caption>All registered datasets in the system catalogue</caption>
+    <thead>
+      <tr>
+        <th scope="col">Original Filename</th>
+        <th scope="col">Owner</th>
+        <th scope="col">Rows</th>
+        <th scope="col">Columns</th>
+        <th scope="col">Uploaded (UTC)</th>
+        <th scope="col">Runs</th>
+        <th scope="col" class="text-end">Administrative Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in datasets %}
+      <tr>
+        <th scope="row">
+          <strong>{{ d.original_name }}</strong>
+          <div class="text-muted small font-monospace">{{ d.id }}</div>
+        </th>
+        <td><span class="badge bg-secondary">{{ d.owner_username }}</span></td>
+        <td>{{ d.rows }}</td>
+        <td>{{ d.column_count }}</td>
+        <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% if d.run_count > 0 %}
+          <span class="badge bg-info text-dark">{{ d.run_count }} run(s)</span>
+          {% else %}
+          <span class="text-muted">None</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <form method="post" action="{% url 'catalogue_delete' d.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently remove “{{ d.original_name|escapejs }}” from the catalogue?');">
+            {% csrf_token %}
+            {% if d.can_delete %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" aria-label="Remove {{ d.original_name }} from catalogue">
+              Remove
+            </button>
+            {% else %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Cannot remove: referenced by existing runs">
+              Locked (In Use)
+            </button>
+            {% endif %}
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel empty">
+  <p class="h5 mb-1">No datasets registered</p>
+  <p class="mb-0">The system catalogue currently has no registered datasets.</p>
+</div>
+{% endif %}
+{% endblock %}

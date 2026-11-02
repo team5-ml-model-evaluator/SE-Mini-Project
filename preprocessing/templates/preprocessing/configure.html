@@ -1,0 +1,83 @@
+{% extends "webui/base.html" %}
+{% block title %}Preprocess {{ dataset.original_name }}{% endblock %}
+{% block content %}
+<h1>Choose target, features and missing-value handling</h1>
+<p class="lede">Dataset <strong>{{ dataset.original_name }}</strong> — {{ dataset.rows }} rows, {{ dataset.column_count }} columns.</p>
+
+{% if error %}
+<div id="error-summary" class="alert alert-danger" role="alert" tabindex="-1">
+  <h2 class="h6">There is a problem</h2>
+  <p class="mb-0">{{ error }}</p>
+</div>
+{% endif %}
+
+{% if form %}
+<form method="post" novalidate class="panel">
+  {% csrf_token %}
+  <div class="mb-4">
+    <label class="form-label" for="{{ form.target.id_for_label }}">{{ form.target.label }}</label>
+    {{ form.target }}
+    {% for error in form.target.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+  </div>
+
+  <fieldset class="mb-4">
+    <legend class="form-label">{{ form.features.label }}</legend>
+    <p class="form-text">{{ form.features.help_text }}</p>
+    <div class="form-check">
+      {% for checkbox in form.features %}
+      <div class="form-check">{{ checkbox.tag }} <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label></div>
+      {% endfor %}
+    </div>
+    {% for error in form.features.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+  </fieldset>
+
+  <fieldset class="mb-4">
+    <legend class="form-label">Missing values</legend>
+    <table class="table">
+      <thead><tr><th scope="col">Column</th><th scope="col">Strategy</th></tr></thead>
+      <tbody>
+        {% for col, field in strategy_rows %}
+        <tr>
+          <th scope="row">{{ col }}</th>
+          <td>
+            <label class="visually-hidden" for="{{ field.id_for_label }}">Strategy for {{ col }}</label>
+            {{ field }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </fieldset>
+
+  <button type="submit" class="btn btn-primary">Save configuration</button>
+  <a class="btn btn-link" href="{% url 'dataset_detail' pk=dataset.id %}">Back to dataset</a>
+</form>
+{% else %}
+<p class="lede">This dataset could not be loaded for preprocessing.</p>
+<a class="btn btn-link" href="{% url 'dataset_list' %}">Back to your datasets</a>
+{% endif %}
+
+{% if preview %}
+<section class="mt-4">
+  <h2 class="h5">Feature matrix preview</h2>
+  <p>{{ preview.n_rows }} rows · {{ preview.n_features }} features · target <code>{{ preview.target_name }}</code> ({{ preview.target_nonnull }} non-null)</p>
+  <table class="table table-sm">
+    <thead><tr>{% for c in preview.columns %}<th scope="col">{{ c }}</th>{% endfor %}<th scope="col">{{ preview.target_name }}</th></tr></thead>
+    <tbody>
+      {% for row in preview.rows %}<tr>{% for v in row %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if existing_configs %}
+<section class="mt-4">
+  <h2 class="h5">Saved configurations</h2>
+  <ul>
+    {% for config in existing_configs %}
+    <li>target <code>{{ config.target_column }}</code> · features {{ config.feature_columns|join:", " }} · {{ config.created_at|date:"SHORT_DATETIME_FORMAT" }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

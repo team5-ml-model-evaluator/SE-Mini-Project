@@ -56,3 +56,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q tests/ webui/
+
+      - name: Run dataset, preprocessing and pipeline tests
+        run: python manage.py test datasets pipeline preprocessing
