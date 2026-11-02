@@ -52,6 +52,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "webui",
     "jobs.apps.JobsConfig",
+    "datasets",
+    "preprocessing",
+    "pipeline",
 ]
 
 MIDDLEWARE = [

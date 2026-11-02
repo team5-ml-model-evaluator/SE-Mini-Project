@@ -12,7 +12,7 @@
 {% endif %}
 
 {% if has_runs %}
-<form method="get" class="panel">
+<form method="get" class="panel" action="#comparison-results">
   <fieldset id="run-selection" tabindex="-1" aria-describedby="selection-help{% if form.errors %} id_runs_error{% endif %}"{% if form.errors %} aria-invalid="true"{% endif %}>
     <legend class="h5">{{ form.runs.label }}</legend>
     <p id="selection-help">Select two or more. Only your completed runs for this dataset are listed.</p>
@@ -29,17 +29,20 @@
 {% endif %}
 
 {% if comparison %}
+<div id="comparison-results">
 {% include "webui/_charts.html" %}
 <section aria-labelledby="comparison-title">
   <h2 id="comparison-title">{{ comparison.task|capfirst }} comparison</h2>
   <a class="btn btn-outline-secondary mb-3" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a>
-  <p>Target: <strong class="mono">{{ comparison.target }}</strong>. Saved evaluation results are displayed {% if comparison.task == "classification" %}as percentages {% endif %}to two decimal places.</p>
-  <p>{% if comparison.task == "classification" %}Higher is better for these metrics. Precision, recall and F1-score use class-frequency weighted averages.{% else %}Lower is better for MAE, MSE and RMSE; higher is better for R².{% endif %} Different features, preprocessing or train/test splits can affect comparability; review each run's settings before drawing conclusions.</p>
+  <p class="text-secondary small mb-3">Target: <strong class="mono text-light">{{ comparison.target }}</strong> · Displaying evaluation metrics side by side.</p>
   <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Run comparison, scroll horizontally to see every run">
   <table class="table" id="comparison-values">
-    <caption>Completed runs on {{ dataset.original_name }}, predicting {{ comparison.target }}. Scroll horizontally for additional runs.</caption>
+    <caption class="visually-hidden">Completed runs on {{ dataset.original_name }}, predicting {{ comparison.target }}. Scroll horizontally for additional runs.</caption>
     <thead><tr><th scope="col">Metric</th>{% for column in comparison.columns %}
-      <th scope="col"><a href="{% url 'run_detail' column.run.job_key %}">{{ column.run.job_key }}</a><br>{{ column.algorithm.label }}{% if column.run.result.standin %}<br><span>Placeholder baseline</span>{% endif %}</th>
+      <th scope="col">
+        <a href="{% url 'run_detail' column.run.job_key %}" class="fw-bold text-decoration-none text-light">{{ column.algorithm.label }}</a>
+        {% if column.run.result.standin %}<br><span class="badge text-bg-secondary">Placeholder baseline</span>{% endif %}
+      </th>
     {% endfor %}</tr></thead>
     <tbody>
       {% for row in comparison.rows %}
@@ -50,7 +53,7 @@
         <td>
           {% if column.matrix_preview.paginated %}<p>Showing the first 20 of {{ column.matrix_preview.class_count }} classes in each direction. <a href="{% url 'run_detail' column.run.job_key %}#matrix-title">Browse full matrix</a></p>{% endif %}
           <table class="table matrix">
-            <caption>{{ column.run.job_key }}: rows are actual classes; columns are predicted classes.</caption>
+            <caption>Rows: actual classes · Columns: predicted classes</caption>
             <thead><tr><th scope="col">Actual / predicted</th>{% for label in column.labels %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
             <tbody>{% for row in column.matrix_rows %}<tr><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td class="num">{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
           </table>
@@ -61,6 +64,16 @@
   </table>
   </div>
 </section>
+</div>
+<script>
+  // Scroll automatically to comparison results so page doesn't reset to top
+  (function() {
+    var res = document.getElementById("comparison-results");
+    if (res && (window.location.search.includes("runs=") || window.location.search.includes("compare="))) {
+      res.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  })();
+</script>
 {% endif %}
 <a class="btn btn-outline-secondary" href="{% url 'dataset_detail' dataset.id %}">Back to dataset</a>
 <a class="btn btn-outline-secondary" href="{% url 'pipeline_step' dataset.id %}">Configure another run</a>
