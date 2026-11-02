@@ -6,6 +6,8 @@ from django.urls import include, path
 
 from .views import admin_dashboard, register
 
+from config.auth_views import AuditLoginView
+
 
 @login_required
 def dashboard(request):
@@ -17,7 +19,7 @@ urlpatterns = [
     path("register/", register, name="register"),
     path(
         "login/",
-        auth_views.LoginView.as_view(
+        AuditLoginView.as_view(
             template_name="registration/login.html"
         ),
         name="login",
@@ -25,5 +27,6 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("admin-dashboard/", admin_dashboard, name="admin_dashboard"),
     path("dashboard/", dashboard, name="dashboard"),
+    path("", include("jobs.urls")),
     path("", include("webui.urls")),
 ]

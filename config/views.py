@@ -7,6 +7,7 @@ from django.views.decorators.http import require_http_methods
 
 from .permissions import role_required
 
+from webui.audit import record_audit
 
 @role_required("Admin")
 def admin_dashboard(request):
@@ -30,6 +31,14 @@ def register(request):
             user = form.save()
             user_group, _ = Group.objects.get_or_create(name="User")
             user.groups.add(user_group)
+
+            record_audit(
+                actor=user ,
+                action="user_registration" ,
+                resource=f"user:{user.pk}" ,
+                outcome="success" ,
+            )
+
             return redirect("login")
     else:
         form = UserCreationForm()

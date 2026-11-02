@@ -4,15 +4,23 @@
 <div class="auth-card">
 <h1>Create an account</h1>
 <p class="lede">Register to use the Web Based ML Model Evaluator.</p>
+{% if form.errors %}
+<div id="error-summary" class="alert alert-danger" role="alert" tabindex="-1">
+  <h2 class="h6">Check your registration details</h2>
+  <ul class="mb-0">
+    {% for field in form %}{% for error in field.errors %}<li><a href="#{{ field.id_for_label }}">{{ field.label }}: {{ error }}</a></li>{% endfor %}{% endfor %}
+    {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 <form method="post" novalidate class="panel">
   {% csrf_token %}
-  {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
   {% for field in form %}
   <div class="mb-3">
     <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-    <input class="form-control{% if field.errors %} is-invalid{% endif %}" type="{{ field.field.widget.input_type }}" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{% if field.field.widget.input_type != 'password' %}{{ field.value|default_if_none:'' }}{% endif %}" autocomplete="{% if field.field.widget.input_type == 'password' %}new-password{% else %}username{% endif %}" required>
-    {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-    {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+    <input class="form-control{% if field.errors %} is-invalid{% endif %}"{% if field.errors %} aria-invalid="true"{% endif %}{% if field.errors or field.help_text %} aria-describedby="{% if field.help_text %}{{ field.id_for_label }}_help {% endif %}{% if field.errors %}{{ field.id_for_label }}_error{% endif %}"{% endif %} type="{{ field.field.widget.input_type }}" name="{{ field.html_name }}" id="{{ field.id_for_label }}" value="{% if field.field.widget.input_type != 'password' %}{{ field.value|default_if_none:'' }}{% endif %}" autocomplete="{% if field.field.widget.input_type == 'password' %}new-password{% else %}username{% endif %}" required>
+    {% if field.errors %}<div id="{{ field.id_for_label }}_error">{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endif %}
+    {% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_help">{{ field.help_text|safe }}</div>{% endif %}
   </div>
   {% endfor %}
   <button type="submit" class="btn btn-primary w-100">Register</button>

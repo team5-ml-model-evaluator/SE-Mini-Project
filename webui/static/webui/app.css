@@ -154,6 +154,8 @@ code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .segmented .btn-check:checked[value="excluded"] + .btn::before { content: "\2715\00a0"; }
 .segmented .btn-check:focus-visible + .btn { outline: 3px solid var(--focus); outline-offset: -3px; }
 .target-field { max-width: 28rem; }
+.target-note { margin: 0; font-weight: 600; }
+.target-note[hidden], .segmented[hidden] { display: none; }
 
 /* Run sheet (review page) */
 .sheet { margin: 0; }
@@ -179,3 +181,28 @@ code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .alert-info .h6::before { content: "\2139\00a0"; }
 .num { font-family: "IBM Plex Mono", monospace; text-align: right; font-variant-numeric: tabular-nums; }
 .matrix td.matrix__hit { font-weight: 600; background: color-mix(in srgb, var(--int-fg) 10%, transparent); }
+
+/* Model comparison: text values and the numeric table accompany every chart. */
+.batch-progress { display: block; width: 100%; height: 1rem; accent-color: var(--amber); }
+.comparison-bars { display: grid; gap: 1.1rem; margin-top: 1.25rem; }
+.comparison-bar-row { display: grid; grid-template-columns: minmax(9rem, 14rem) minmax(5rem, 1fr) max-content; gap: 1rem; align-items: center; }
+.comparison-bar-label { font-weight: 600; overflow-wrap: anywhere; }
+.comparison-bar-track { position: relative; height: 1.1rem; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--slate) 12%, var(--surface)); overflow: hidden; }
+.comparison-bar-fill { position: absolute; top: 0; bottom: 0; background: var(--amber); }
+.comparison-bar-zero { position: absolute; z-index: 1; top: 0; bottom: 0; width: 2px; background: var(--ink); }
+.comparison-bar-value { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; }
+.chart-leader { margin-top: 1rem; padding: .7rem 1rem; border-left: 3px solid var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--surface)); }
+@media (max-width: 575px) {
+  .comparison-bar-row { grid-template-columns: minmax(0, 1fr) max-content; gap: .4rem 1rem; }
+  .comparison-bar-track { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Keyboard navigation must override Bootstrap button-specific outline resets. */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, .btn:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: 3px;
+}
+#main:focus { outline: none; }
+.run-choice input[type="checkbox"] { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
+.run-choice label { min-height: 1.5rem; overflow-wrap: anywhere; }
+h1, .lede, .comparison-bar-label { overflow-wrap: anywhere; }

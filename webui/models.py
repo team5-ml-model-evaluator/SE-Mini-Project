@@ -31,6 +31,22 @@ class Dataset(models.Model):
         return [c["name"] for c in self.profile["columns"]]
 
 
+class RunBatch(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="run_batches")
+    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="run_batches")
+    task = models.CharField(max_length=14, choices=[("classification", "Classification"), ("regression", "Regression")])
+    run_config = models.JSONField()
+    active = models.BooleanField(default=True)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["owner"], condition=models.Q(active=True),
+                                               name="one_active_batch_per_owner")]
+
+
 class Run(models.Model):
     """One training run and its state.
 
@@ -44,6 +60,7 @@ class Run(models.Model):
     job_key = models.CharField(max_length=20, unique=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="runs")
     dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="runs")
+    batch = models.ForeignKey(RunBatch, on_delete=models.SET_NULL, related_name="runs", null=True, blank=True)
     run_config = models.JSONField()
     state = models.CharField(max_length=10, default=QUEUED)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -65,3 +82,45 @@ class Run(models.Model):
             return None
         end = self.finished_at or timezone.now()
         return round((end - self.started_at).total_seconds(), 1)
+
+class AuditLogQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValueError("Audit records cannot be modified.")
+
+    def delete(self):
+        raise ValueError("Audit records cannot be deleted.")
+
+
+class AuditLogManager(models.Manager.from_queryset(AuditLogQuerySet)):
+    pass
+
+class AuditLog(models.Model):
+    objects = AuditLogManager()
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=50)
+    resource = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(default=timezone.now, editable=False)
+    outcome = models.CharField(max_length=20)
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["timestamp"]
+
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValueError("Audit records cannot be modified.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Audit records cannot be deleted.")
+
+    def __str__(self):
+        return f"{self.action}: {self.resource} ({self.outcome})"

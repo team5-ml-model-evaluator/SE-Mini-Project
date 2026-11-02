@@ -56,8 +56,12 @@ def start(owner, dataset, run_config):
 
 def get_status(run):
     """The shape of GET /api/runs/<job_key>/status in the SAD."""
+    if run.batch_id:
+        from ..batches import reconcile_batch
+        reconcile_batch(run.batch)
     run.refresh_from_db()
-    if run.state in (Run.QUEUED, Run.RUNNING) and (timezone.now() - run.created_at).total_seconds() > STALE_AFTER_S:
+    if (not run.batch_id and run.state in (Run.QUEUED, Run.RUNNING)
+            and (timezone.now() - run.created_at).total_seconds() > STALE_AFTER_S):
         # The in-process worker died with the server; do not show "Running" forever.
         run.state, run.error, run.finished_at = Run.FAILED, "The run was interrupted before it finished. Start it again.", timezone.now()
         run.save(update_fields=["state", "error", "finished_at"])
@@ -81,8 +85,10 @@ def _execute(job_key, queue_s, run_s):
     try:
         time.sleep(queue_s)
         run = Run.objects.get(job_key=job_key)
-        run.state, run.started_at = Run.RUNNING, timezone.now()
-        run.save(update_fields=["state", "started_at"])
+        claimed = Run.objects.filter(pk=run.pk, state=Run.QUEUED).update(state=Run.RUNNING, started_at=timezone.now())
+        if not claimed:
+            return
+        run.refresh_from_db()
         time.sleep(run_s)
         try:
             run.result = _train_and_score(run)
@@ -93,7 +99,9 @@ def _execute(job_key, queue_s, run_s):
             logger.exception("Run %s failed unexpectedly: %s", job_key, exc)
             run.state, run.error = Run.FAILED, "The run stopped unexpectedly. Check the dataset and start it again."
         run.finished_at = timezone.now()
-        run.save()
+        # Do not resurrect a job whose worker lease expired while fitting.
+        Run.objects.filter(pk=run.pk, state=Run.RUNNING).update(
+            result=run.result, state=run.state, error=run.error, finished_at=run.finished_at)
     finally:
         close_old_connections()
 
@@ -204,6 +212,7 @@ def _train_and_score(run):
         )
         return {
             "task": "classification",
+            "execution": _execution_details(res["model"]),
             "standin": False,
             "test_rows": len(y_test),
             "accuracy": float(metrics["accuracy"]),
@@ -231,6 +240,7 @@ def _train_and_score(run):
         )
         return {
             "task": "regression",
+            "execution": _execution_details(res["model"]),
             "standin": False,
             "test_rows": len(y_test),
             "mae": float(metrics["mae"]),
@@ -238,6 +248,18 @@ def _train_and_score(run):
             "rmse": float(metrics["rmse"]),
             "r2": float(metrics["r2"]),
         }
+
+
+def _execution_details(model):
+    """Snapshot the effective settings for reports without changing the run interface."""
+    return {
+        "preprocessing": {
+            "imputation": "Numeric missing values: training-set median, or 0 for an entirely missing training column",
+            "encoding": "One-hot encoding (drop_first=True, dummy_na=False)",
+            "scaling": "None",
+        },
+        "hyperparameters": model.get_params(deep=False),
+    }
 
 
 def _train_and_score_standin(run):
