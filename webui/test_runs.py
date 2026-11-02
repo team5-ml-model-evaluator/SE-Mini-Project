@@ -2,9 +2,9 @@
 import re
 import subprocess
 import time
-from unittest.mock import Mock, patch
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from django.test import override_settings
 from django.urls import reverse
@@ -188,7 +188,9 @@ class StatusEndpointTests(RunTestCase):
 
     def test_run_left_running_for_too_long_is_failed_not_shown_running_forever(self):
         self.set_state(self.run, "Running", started_at=timezone.now(), finished_at=None)
-        Run.objects.filter(pk=self.run.pk).update(heartbeat_at=timezone.now() - timedelta(seconds=STALE_AFTER_S + 1))
+        Run.objects.filter(pk=self.run.pk).update(
+            heartbeat_at=timezone.now() - timedelta(seconds=STALE_AFTER_S + 1)
+        )
         data = self.client.get(self.url).json()
         self.assertEqual(data["state"], "Failed")
         self.assertIn("interrupted", data["error"])
@@ -301,187 +303,96 @@ class ResultsTests(RunTestCase):
         html = self.page(run)
         self.assertGreaterEqual(len(re.findall(r'class="table-wrap" tabindex="0" role="region" aria-label="[^"]+"', html)), 2)
 
-class WorkerSupervisorTests(WebUITestCase):
 
+class WorkerSupervisorTests(WebUITestCase):
     def setUp(self):
         super().setUp()
-
         dataset = self.make_dataset()
-
         self.run = Run.objects.create(
-            job_key="r-supervisor-test",
-            owner=self.user,
-            dataset=dataset,
-            run_config={
-                "algorithm": CLASSIFIER,
-                "random_seed": 42,
-            },
+            job_key="r-supervisor-test", owner=self.user, dataset=dataset,
+            run_config={"algorithm": CLASSIFIER, "random_seed": 42},
         )
 
-    @override_settings(
-        STANDIN_RUN_SYNC=False,
-        TRAINING_JOB_TIMEOUT_SECONDS=0.02,
-        TRAINING_JOB_HEARTBEAT_INTERVAL_SECONDS=0.01,
-    )
-    def test_timeout_terminates_child_and_marks_run_failed(self):
-
+    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=0.02,
+                       TRAINING_JOB_HEARTBEAT_INTERVAL_SECONDS=0.01)
+    def test_timeout_terminates_child_and_marks_only_active_run_failed(self):
         Run.objects.filter(pk=self.run.pk).update(
-            state=Run.RUNNING,
-            started_at=timezone.now(),
-            finished_at=None,
-            result=None,
+            state=Run.RUNNING, started_at=timezone.now(), finished_at=None, result=None
         )
 
         class SlowChild:
-
             pid = 12345
             returncode = None
 
             def wait(self, timeout=None):
                 time.sleep(timeout + 0.005)
-
-                raise subprocess.TimeoutExpired(
-                    cmd="run_model_job",
-                    timeout=timeout,
-                )
+                raise subprocess.TimeoutExpired(cmd="run_model_job", timeout=timeout)
 
             def poll(self):
                 return None
 
         child = SlowChild()
-
-        with patch(
-            "webui.standins.runs.subprocess.Popen",
-            return_value=child,
-        ), patch(
-            "webui.standins.runs._terminate_process"
-        ) as terminate, patch(
-            "webui.standins.runs.close_old_connections"
-        ):
-
+        with patch("webui.standins.runs.subprocess.Popen", return_value=child), \
+             patch("webui.standins.runs._terminate_process") as terminate, \
+             patch("webui.standins.runs.close_old_connections"):
             from .standins import runs
-
-            runs._execute(
-                self.run.job_key,
-                queue_s=0,
-                run_s=0,
-            )
+            runs._execute(self.run.job_key, queue_s=0, run_s=0)
 
         terminate.assert_called_once_with(child)
-
         self.run.refresh_from_db()
-
         self.assertEqual(self.run.state, Run.FAILED)
         self.assertIn("time limit", self.run.error)
         self.assertIsNone(self.run.result)
 
-    @override_settings(
-        STANDIN_RUN_SYNC=False,
-        TRAINING_JOB_TIMEOUT_SECONDS=1,
-    )
-    def test_nonzero_child_exit_marks_run_failed(self):
-
+    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=1)
+    def test_nonzero_child_exit_is_recorded_as_worker_failure(self):
         Run.objects.filter(pk=self.run.pk).update(
-            state=Run.RUNNING,
-            started_at=timezone.now(),
-            finished_at=None,
-            result=None,
+            state=Run.RUNNING, started_at=timezone.now(), finished_at=None, result=None
         )
-
         child = Mock()
         child.wait.return_value = 17
         child.returncode = 17
-
-        with patch(
-            "webui.standins.runs.subprocess.Popen",
-            return_value=child,
-        ), patch(
-            "webui.standins.runs.close_old_connections"
-        ):
-
+        with patch("webui.standins.runs.subprocess.Popen", return_value=child), \
+             patch("webui.standins.runs.close_old_connections"):
             from .standins import runs
-
-            runs._execute(
-                self.run.job_key,
-                queue_s=0,
-                run_s=0,
-            )
+            runs._execute(self.run.job_key, queue_s=0, run_s=0)
 
         self.run.refresh_from_db()
-
         self.assertEqual(self.run.state, Run.FAILED)
-        self.assertIn(
-            "worker stopped unexpectedly",
-            self.run.error,
-        )
+        self.assertIn("worker stopped unexpectedly", self.run.error)
 
     @override_settings(STANDIN_RUN_SYNC=True)
-    def test_internal_command_delegates_to_worker_body(self):
-
+    def test_internal_management_command_delegates_to_worker_body(self):
         from django.core.management import call_command
 
-        with patch(
-            "webui.management.commands.run_model_job._execute_in_worker"
-        ) as worker:
-
+        with patch("webui.management.commands.run_model_job._execute_in_worker") as worker:
             call_command(
                 "run_model_job",
-                "--job-key",
-                self.run.job_key,
-                "--queue-seconds",
-                "1.5",
-                "--run-seconds",
-                "2.5",
+                "--job-key", self.run.job_key,
+                "--queue-seconds", "1.5",
+                "--run-seconds", "2.5",
             )
 
-        worker.assert_called_once_with(
-            self.run.job_key,
-            queue_s=1.5,
-            run_s=2.5,
-        )
+        worker.assert_called_once_with(self.run.job_key, queue_s=1.5, run_s=2.5)
 
-    @override_settings(
-        STANDIN_RUN_SYNC=False,
-        TRAINING_JOB_TIMEOUT_SECONDS=1,
-    )
-    def test_supervisor_preserves_child_result(self):
-
+    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=1)
+    def test_supervisor_invokes_internal_management_command_and_keeps_child_result(self):
         child = Mock()
         child.wait.return_value = 0
 
         def start_child(command, **kwargs):
-
             self.assertIn("run_model_job", command)
             self.assertIn(self.run.job_key, command)
-
             Run.objects.filter(pk=self.run.pk).update(
-                state=Run.COMPLETED,
-                result={"task": "classification"},
-                finished_at=timezone.now(),
+                state=Run.COMPLETED, result={"task": "classification"}, finished_at=timezone.now()
             )
-
             return child
 
-        with patch(
-            "webui.standins.runs.subprocess.Popen",
-            side_effect=start_child,
-        ), patch(
-            "webui.standins.runs.close_old_connections"
-        ):
-
+        with patch("webui.standins.runs.subprocess.Popen", side_effect=start_child), \
+             patch("webui.standins.runs.close_old_connections"):
             from .standins import runs
-
-            runs._execute(
-                self.run.job_key,
-                queue_s=0,
-                run_s=0,
-            )
+            runs._execute(self.run.job_key, queue_s=0, run_s=0)
 
         self.run.refresh_from_db()
-
         self.assertEqual(self.run.state, Run.COMPLETED)
-
-        self.assertEqual(
-            self.run.result,
-            {"task": "classification"},
-        )
+        self.assertEqual(self.run.result, {"task": "classification"})

@@ -1,5 +1,4 @@
 """Internal child-process entry point for a supervised model-training run."""
-
 from django.core.management.base import BaseCommand, CommandError
 
 from webui.models import Run
@@ -16,12 +15,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         job_key = options["job_key"]
-
         if not Run.objects.filter(job_key=job_key).exists():
-            raise CommandError(
-                "The requested training run does not exist."
-            )
-
+            raise CommandError("The requested training run does not exist.")
         _execute_in_worker(
             job_key,
             queue_s=options["queue_seconds"],
