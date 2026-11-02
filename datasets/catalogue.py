@@ -9,9 +9,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import QuerySet
-from django.shortcuts import get_object_or_404
+from django.http import Http404
 
 from webui.models import Dataset
 from .exceptions import DatasetAdminError, DatasetInUseError
@@ -83,7 +83,10 @@ def delete_catalogue_dataset(pk: Any, user: Any) -> dict[str, Any]:
     if isinstance(pk, Dataset):
         dataset = pk
     else:
-        dataset = get_object_or_404(Dataset, pk=pk)
+        try:
+            dataset = Dataset.objects.get(pk=pk)
+        except (Dataset.DoesNotExist, ValidationError, ValueError):
+            raise Http404(f"Dataset '{pk}' not found.")
 
     # Safety check: prevent deleting datasets referenced by existing training runs
     if hasattr(dataset, "runs") and dataset.runs.exists():
