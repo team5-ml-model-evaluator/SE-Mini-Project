@@ -18,10 +18,15 @@
       Model Evaluator
     </a>
     {% if user.is_authenticated %}
-    <form method="post" action="{% url 'logout' %}" class="d-flex align-items-center gap-3 m-0">{% csrf_token %}
-      <span>Signed in as <strong>{{ user.get_username }}</strong></span>
-      <button type="submit" class="btn btn-sm btn-outline-light">Sign out</button>
-    </form>
+    <div class="d-flex align-items-center gap-2">
+      {% if user.is_staff or user.is_superuser %}
+      <a class="btn btn-sm btn-outline-warning text-white" href="{% url 'catalogue_list' %}">Catalogue Admin</a>
+      {% endif %}
+      <form method="post" action="{% url 'logout' %}" class="d-flex align-items-center gap-3 m-0">{% csrf_token %}
+        <span>Signed in as <strong>{{ user.get_username }}</strong></span>
+        <button type="submit" class="btn btn-sm btn-outline-light">Sign out</button>
+      </form>
+    </div>
     {% endif %}
   </div>
 </header>
