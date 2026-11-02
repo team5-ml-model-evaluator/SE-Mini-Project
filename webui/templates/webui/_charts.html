@@ -2,7 +2,7 @@
 <section class="panel" aria-labelledby="chart-title">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
     <div><h2 id="chart-title" class="h5">Comparison chart</h2><p class="mb-2">{{ chart.label }} · {% if chart.higher %}Higher is better.{% else %}Lower is better.{% endif %}</p></div>
-    <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-end" action="#comparison-results">
       {% if not batch %}{% for column in comparison.columns %}<input type="hidden" name="runs" value="{{ column.run.job_key }}">{% endfor %}{% endif %}
       <div><label for="chart-metric" class="form-label">Metric</label><select name="metric" id="chart-metric" class="form-select">{% for key,label in chart.choices %}<option value="{{ key }}"{% if chart.metric == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
       <button type="submit" class="btn btn-outline-secondary">Update chart</button>

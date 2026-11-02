@@ -15,9 +15,7 @@ class RunChoiceField(forms.ModelMultipleChoiceField):
         key = config.get("algorithm", "")
         algorithm = BY_KEY.get(key) if isinstance(key, str) else None
         name = algorithm.label if algorithm else "Unknown algorithm"
-        task = algorithm.task if algorithm else "unknown task"
-        return (f"{run.job_key} · {name} · target: {config.get('target_column', 'unknown')} "
-                f"· {task} · {run.created_at:%Y-%m-%d %H:%M} UTC")
+        return f"{name} · {run.created_at:%b %d, %Y %I:%M %p}"
 
 
 class ComparisonForm(forms.Form):
@@ -30,9 +28,15 @@ class ComparisonForm(forms.Form):
 
     def __init__(self, *args, owner, dataset, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["runs"].queryset = Run.objects.filter(
+        base_qs = Run.objects.filter(
             owner=owner, dataset=dataset, state=Run.COMPLETED,
-        ).defer("result")
+        ).defer("result").order_by("-created_at")
+        recent_ids = set(base_qs.values_list("id", flat=True)[:10])
+        if args and args[0]:
+            selected_keys = args[0].getlist("runs")
+            if selected_keys:
+                recent_ids.update(base_qs.filter(job_key__in=selected_keys).values_list("id", flat=True))
+        self.fields["runs"].queryset = base_qs.filter(id__in=recent_ids)
 
     def clean_runs(self):
         selected = self.cleaned_data["runs"]

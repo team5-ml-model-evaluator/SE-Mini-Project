@@ -1,7 +1,10 @@
 """UI tests for issue #19: job state, polling, failure reason and results (MLE-F-040, F-041, F-050, F-051)."""
 import re
+import subprocess
+import time
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from django.test import override_settings
 from django.urls import reverse
@@ -192,7 +195,9 @@ class StatusEndpointTests(RunTestCase):
 
     def test_run_left_running_for_too_long_is_failed_not_shown_running_forever(self):
         self.set_state(self.run, "Running", started_at=timezone.now(), finished_at=None)
-        Run.objects.filter(pk=self.run.pk).update(created_at=timezone.now() - timedelta(hours=1))
+        Run.objects.filter(pk=self.run.pk).update(
+            heartbeat_at=timezone.now() - timedelta(seconds=STALE_AFTER_S + 1)
+        )
         data = self.client.get(self.url).json()
         self.assertEqual(data["state"], "Failed")
         self.assertIn("interrupted", data["error"])
