@@ -64,6 +64,7 @@ class Run(models.Model):
     run_config = models.JSONField()
     state = models.CharField(max_length=10, default=QUEUED)
     created_at = models.DateTimeField(auto_now_add=True)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
