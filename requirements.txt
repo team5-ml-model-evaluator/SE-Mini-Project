@@ -7,3 +7,6 @@ pytest-cov
 pytest-django>=4.8
 reportlab>=4.4,<5
 pypdf>=5,<7
+
+
+locust==2.47.0

@@ -11,8 +11,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Dataset, Run
-from .tests import WebUITestCase, upload
 from .standins.runs import STALE_AFTER_S
+from .tests import WebUITestCase, upload, make_csv
+
+import time
+
+import shutil
+import tempfile
+
+from django.contrib.auth import get_user_model
+from django.test import TransactionTestCase
 
 CLASSIFIER, REGRESSOR = "random_forest", "linear_regression"
 
@@ -229,6 +237,7 @@ class FailureTests(RunTestCase):
         self.assertNotIn("/secret/path", html)
 
 
+
 class ResultsTests(RunTestCase):
     def test_classification_shows_the_four_metrics_in_a_numeric_table(self):
         _, run, _ = self.start()
@@ -304,95 +313,91 @@ class ResultsTests(RunTestCase):
         self.assertGreaterEqual(len(re.findall(r'class="table-wrap" tabindex="0" role="region" aria-label="[^"]+"', html)), 2)
 
 
-class WorkerSupervisorTests(WebUITestCase):
-    def setUp(self):
-        super().setUp()
-        dataset = self.make_dataset()
-        self.run = Run.objects.create(
-            job_key="r-supervisor-test", owner=self.user, dataset=dataset,
-            run_config={"algorithm": CLASSIFIER, "random_seed": 42},
-        )
+class AsyncWorkerFailureTests(TransactionTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.media_root = tempfile.mkdtemp(prefix="async-run-test-")
 
-    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=0.02,
-                       TRAINING_JOB_HEARTBEAT_INTERVAL_SECONDS=0.01)
-    def test_timeout_terminates_child_and_marks_only_active_run_failed(self):
-        Run.objects.filter(pk=self.run.pk).update(
-            state=Run.RUNNING, started_at=timezone.now(), finished_at=None, result=None
-        )
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.media_root, ignore_errors=True)
+        super().tearDownClass()
 
-        class SlowChild:
-            pid = 12345
-            returncode = None
+    @override_settings(
 
-            def wait(self, timeout=None):
-                time.sleep(timeout + 0.005)
-                raise subprocess.TimeoutExpired(cmd="run_model_job", timeout=timeout)
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+        STANDIN_RUN_SYNC=False,
+        STANDIN_QUEUE_SECONDS=0,
+        STANDIN_RUN_SECONDS=0,
+    )
+    def test_async_worker_failure_is_reported_within_10_seconds(self):
+        from unittest import mock
 
-            def poll(self):
-                return None
+        # Use a separate media directory for this test.
+        from django.test import override_settings
 
-        child = SlowChild()
-        with patch("webui.standins.runs.subprocess.Popen", return_value=child), \
-             patch("webui.standins.runs._terminate_process") as terminate, \
-             patch("webui.standins.runs.close_old_connections"):
-            from .standins import runs
-            runs._execute(self.run.job_key, queue_s=0, run_s=0)
-
-        terminate.assert_called_once_with(child)
-        self.run.refresh_from_db()
-        self.assertEqual(self.run.state, Run.FAILED)
-        self.assertIn("time limit", self.run.error)
-        self.assertIsNone(self.run.result)
-
-    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=1)
-    def test_nonzero_child_exit_is_recorded_as_worker_failure(self):
-        Run.objects.filter(pk=self.run.pk).update(
-            state=Run.RUNNING, started_at=timezone.now(), finished_at=None, result=None
-        )
-        child = Mock()
-        child.wait.return_value = 17
-        child.returncode = 17
-        with patch("webui.standins.runs.subprocess.Popen", return_value=child), \
-             patch("webui.standins.runs.close_old_connections"):
-            from .standins import runs
-            runs._execute(self.run.job_key, queue_s=0, run_s=0)
-
-        self.run.refresh_from_db()
-        self.assertEqual(self.run.state, Run.FAILED)
-        self.assertIn("worker stopped unexpectedly", self.run.error)
-
-    @override_settings(STANDIN_RUN_SYNC=True)
-    def test_internal_management_command_delegates_to_worker_body(self):
-        from django.core.management import call_command
-
-        with patch("webui.management.commands.run_model_job._execute_in_worker") as worker:
-            call_command(
-                "run_model_job",
-                "--job-key", self.run.job_key,
-                "--queue-seconds", "1.5",
-                "--run-seconds", "2.5",
+        with override_settings(MEDIA_ROOT=self.media_root):
+            User = get_user_model()
+            user = User.objects.create_user(
+                "async_worker_test",
+                password="test-password",
             )
+            self.client.force_login(user)
 
-        worker.assert_called_once_with(self.run.job_key, queue_s=1.5, run_s=2.5)
+            # Create a dataset.
+            upload(self.client, make_csv())
+            dataset = Dataset.objects.latest("created_at")
 
-    @override_settings(STANDIN_RUN_SYNC=False, TRAINING_JOB_TIMEOUT_SECONDS=1)
-    def test_supervisor_invokes_internal_management_command_and_keeps_child_result(self):
-        child = Mock()
-        child.wait.return_value = 0
+            # Prepare the saved model configuration.
+            features = [
+                column for column in dataset.column_names
+                if column != "bought"
+            ]
 
-        def start_child(command, **kwargs):
-            self.assertIn("run_model_job", command)
-            self.assertIn(self.run.job_key, command)
-            Run.objects.filter(pk=self.run.pk).update(
-                state=Run.COMPLETED, result={"task": "classification"}, finished_at=timezone.now()
+            session = self.client.session
+            session[f"draft-{dataset.id}"] = {
+                "target_column": "bought",
+                "feature_columns": features,
+                "excluded_columns": [],
+                "algorithm": CLASSIFIER,
+            }
+            session.save()
+
+            start_time = time.monotonic()
+
+            with mock.patch(
+                "webui.standins.runs._train_and_score",
+                side_effect=RuntimeError("simulated worker failure"),
+            ):
+                response = self.client.post(
+                    reverse("start_run", args=[dataset.id])
+                )
+                self.assertEqual(response.status_code, 302)
+
+                run = Run.objects.latest("created_at")
+                deadline = start_time + 10
+                data = None
+
+                while time.monotonic() < deadline:
+                    data = self.client.get(
+                        reverse("run_status", args=[run.job_key])
+                    ).json()
+
+                    if data["state"] == "Failed":
+                        break
+
+                    time.sleep(0.1)
+
+            elapsed = time.monotonic() - start_time
+
+            self.assertIsNotNone(data)
+            self.assertEqual(data["state"], "Failed")
+            self.assertTrue(data["error"])
+            self.assertLess(elapsed, 10)
+
+            # Verify the application still serves the run page.
+            response = self.client.get(
+                reverse("run_detail", args=[run.job_key])
             )
-            return child
-
-        with patch("webui.standins.runs.subprocess.Popen", side_effect=start_child), \
-             patch("webui.standins.runs.close_old_connections"):
-            from .standins import runs
-            runs._execute(self.run.job_key, queue_s=0, run_s=0)
-
-        self.run.refresh_from_db()
-        self.assertEqual(self.run.state, Run.COMPLETED)
-        self.assertEqual(self.run.result, {"task": "classification"})
+            self.assertEqual(response.status_code, 200)

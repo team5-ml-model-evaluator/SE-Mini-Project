@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 import pandas as pd
 from django.conf import settings
-from django.db import close_old_connections
+from django.db import OperationalError, close_old_connections
 from django.utils import timezone
 
 from baseline_model import run_baseline
@@ -153,6 +153,19 @@ class RunFailed(Exception):
     """A failure whose message tells the user what to change."""
 
 
+def _retry_if_db_locked(operation, timeout_s=8.0, sleep_s=0.05):
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            return operation()
+        except OperationalError as exc:
+            if "locked" not in str(exc).lower():
+                raise
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(sleep_s)
+
+
 def _execute(job_key, queue_s, run_s):
     """Supervise one isolated training process and enforce its wall-clock limit.
 
@@ -227,8 +240,8 @@ def _execute_in_worker(job_key, queue_s, run_s):
     try:
         time.sleep(queue_s)
         run = Run.objects.get(job_key=job_key)
-        claimed = Run.objects.filter(pk=run.pk, state=Run.QUEUED).update(
-            state=Run.RUNNING, started_at=timezone.now(), heartbeat_at=timezone.now()
+        claimed = _retry_if_db_locked(
+            lambda: Run.objects.filter(pk=run.pk, state=Run.QUEUED).update(state=Run.RUNNING, started_at=timezone.now())
         )
         if not claimed:
             return
@@ -243,10 +256,11 @@ def _execute_in_worker(job_key, queue_s, run_s):
             logger.exception("Run %s failed unexpectedly: %s", job_key, exc)
             run.state, run.error = Run.FAILED, "The run stopped unexpectedly. Check the dataset and start it again."
         run.finished_at = timezone.now()
-        # Do not resurrect a job whose worker lease expired or timed out while fitting.
-        Run.objects.filter(pk=run.pk, state=Run.RUNNING).update(
-            result=run.result, state=run.state, error=run.error, finished_at=run.finished_at,
-            heartbeat_at=timezone.now(),
+        # Do not resurrect a job whose worker lease expired while fitting.
+        _retry_if_db_locked(
+            lambda: Run.objects.filter(pk=run.pk, state=Run.RUNNING).update(
+                result=run.result, state=run.state, error=run.error, finished_at=run.finished_at
+            )
         )
     finally:
         close_old_connections()
