@@ -243,7 +243,7 @@ class BatchTests(WebUITestCase):
             return CLASSIFICATION
 
         with patch("webui.standins.runs._train_and_score", side_effect=expire_while_fitting):
-            runs._execute(run.job_key, 0, 0)
+            runs._execute_in_worker(run.job_key, 0, 0)
         run.refresh_from_db()
         self.assertEqual(run.state, Run.FAILED)
         self.assertIn("interrupted", run.error)

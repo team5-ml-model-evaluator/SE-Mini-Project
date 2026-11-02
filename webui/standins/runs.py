@@ -1,27 +1,26 @@
-"""STAND-IN for RunsApp and TrainingWorker (SAD interface 2).
+"""Asynchronous model-run execution and evaluation metrics (SAD interface 2).
 
-The real RunsApp enqueues a run, and the real TrainingWorker trains the chosen algorithm and
-computes metrics with scikit-learn (issues #12, #13). Until those are merged this module lets the
-UI be built and tested end to end. It keeps the same shape as the SAD:
+The web process creates a Run record and supervises a separate Django management-command
+process for model fitting. The child process owns the database state transition and result
+persistence; the supervisor enforces a wall-clock timeout and refreshes the worker lease.
 
-    start(owner, dataset, run_config) -> job_key      (RunsApp creates the record and enqueues)
-    get_status(run)                  -> dict           (state, elapsed_s, error)
-
-The stand-in worker does NOT train the chosen algorithm. It predicts the most frequent class
-(classification) or the training mean (regression) on a held-out split, so the numbers are real
-but only describe that trivial baseline. Results carry ``standin: True`` and the UI says so.
-
-To swap: delete this file, point ``start`` and ``get_status`` in views.py at RunsApp, and keep
-the result keys below (they match evaluation_metrics.py from issue #13).
+The optional baseline stand-in remains available for development/testing and is explicitly
+marked in stored results.
 """
 import csv
 import io
 import logging
+import os
 import random
+import signal
+import subprocess
+import sys
 import threading
 import time
 import uuid
 from collections import Counter
+from datetime import timedelta
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,75 @@ from evaluation_metrics import (
 from ..models import Run
 from .catalogue import BY_KEY
 
-STALE_AFTER_S = 15 * 60
+# A run is considered lost when its supervising worker stops refreshing this lease.
+STALE_AFTER_S = int(getattr(settings, "RUN_WORKER_LEASE_SECONDS", 10))
+WORKER_EXIT_ERROR = "The training worker stopped unexpectedly. Please start the run again."
+
+
+def _touch_run_heartbeat(job_key):
+    """Refresh the lease while the supervisor is waiting for the training process."""
+    Run.objects.filter(job_key=job_key, state__in=[Run.QUEUED, Run.RUNNING]).update(
+        heartbeat_at=timezone.now()
+    )
+
+
+def _mark_worker_failed(job_key, message):
+    """Fail only active runs; never overwrite a terminal state written by the child."""
+    Run.objects.filter(job_key=job_key, state__in=[Run.QUEUED, Run.RUNNING]).update(
+        state=Run.FAILED, error=message, finished_at=timezone.now()
+    )
+
+
+def _terminate_process(process):
+    """Stop the training process (and its process group on POSIX) and reap it."""
+    try:
+        if os.name == "nt":
+            process.terminate()
+        else:
+            os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        logger.exception("Could not send terminate signal to training process %s", process.pid)
+        try:
+            process.terminate()
+        except OSError:
+            pass
+
+    try:
+        process.wait(timeout=5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    try:
+        if os.name == "nt":
+            process.kill()
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        logger.exception("Could not kill training process %s", process.pid)
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        logger.error("Training process %s did not exit after kill", process.pid)
+
+
+def _worker_command(job_key, queue_s, run_s):
+    """Build the internal Django command used to execute one model in isolation."""
+    manage_py = Path(settings.BASE_DIR) / "manage.py"
+    return [
+        sys.executable, str(manage_py), "run_model_job",
+        "--job-key", job_key,
+        "--queue-seconds", str(queue_s),
+        "--run-seconds", str(run_s),
+    ]
 
 
 def start(owner, dataset, run_config):
@@ -60,11 +127,17 @@ def get_status(run):
         from ..batches import reconcile_batch
         reconcile_batch(run.batch)
     run.refresh_from_db()
-    if (not run.batch_id and run.state in (Run.QUEUED, Run.RUNNING)
-            and (timezone.now() - run.created_at).total_seconds() > STALE_AFTER_S):
-        # The in-process worker died with the server; do not show "Running" forever.
-        run.state, run.error, run.finished_at = Run.FAILED, "The run was interrupted before it finished. Start it again.", timezone.now()
-        run.save(update_fields=["state", "error", "finished_at"])
+    if not run.batch_id and run.state in (Run.QUEUED, Run.RUNNING):
+        cutoff = timezone.now() - timedelta(seconds=STALE_AFTER_S)
+        expired = Run.objects.filter(
+            pk=run.pk, state__in=[Run.QUEUED, Run.RUNNING], heartbeat_at__lt=cutoff
+        ).update(
+            state=Run.FAILED,
+            error="The run was interrupted because its training worker stopped responding. Please start it again.",
+            finished_at=timezone.now(),
+        )
+        if expired:
+            run.refresh_from_db()
     return {
         "job_key": run.job_key,
         "state": run.state,
@@ -81,11 +154,82 @@ class RunFailed(Exception):
 
 
 def _execute(job_key, queue_s, run_s):
+    """Supervise one isolated training process and enforce its wall-clock limit.
+
+    Tests and explicit local synchronous mode execute the worker body directly. Normal
+    requests and batch execution use a child process so a stuck estimator can be stopped
+    without terminating the Django web process.
+    """
+    if getattr(settings, "STANDIN_RUN_SYNC", False):
+        return _execute_in_worker(job_key, queue_s, run_s)
+
+    close_old_connections()
+    process = None
+    timeout_s = float(getattr(settings, "TRAINING_JOB_TIMEOUT_SECONDS", 600))
+    heartbeat_interval = float(
+        getattr(settings, "TRAINING_JOB_HEARTBEAT_INTERVAL_SECONDS", 2)
+    )
+    if timeout_s <= 0 or heartbeat_interval <= 0:
+        _mark_worker_failed(job_key, "Training worker settings are invalid. Please contact an administrator.")
+        return
+
+    try:
+        _touch_run_heartbeat(job_key)
+        popen_options = {"cwd": str(settings.BASE_DIR)}
+        if os.name == "nt":
+            popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            # Isolate the child so timeout cleanup can terminate any descendants too.
+            popen_options["start_new_session"] = True
+        deadline = time.monotonic() + timeout_s
+        process = subprocess.Popen(_worker_command(job_key, queue_s, run_s), **popen_options)
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _terminate_process(process)
+                _mark_worker_failed(
+                    job_key,
+                    f"Training exceeded the {timeout_s:g}-second time limit and was stopped. "
+                    "Try a smaller dataset or a simpler model.",
+                )
+                return
+            try:
+                return_code = process.wait(timeout=min(heartbeat_interval, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                _touch_run_heartbeat(job_key)
+
+        if return_code != 0:
+            logger.error("Training worker for run %s exited with status %s", job_key, return_code)
+            _mark_worker_failed(job_key, WORKER_EXIT_ERROR)
+            return
+
+        # A successful process exit must also have persisted a terminal Run state.
+        run = Run.objects.filter(job_key=job_key).only("state").first()
+        if run and run.state in (Run.QUEUED, Run.RUNNING):
+            _mark_worker_failed(job_key, WORKER_EXIT_ERROR)
+    except OSError:
+        logger.exception("Could not start the training worker for run %s", job_key)
+        _mark_worker_failed(job_key, "The training worker could not be started. Please try again.")
+    except Exception:
+        logger.exception("Training supervisor failed for run %s", job_key)
+        if process is not None and process.poll() is None:
+            _terminate_process(process)
+        _mark_worker_failed(job_key, WORKER_EXIT_ERROR)
+    finally:
+        close_old_connections()
+
+
+def _execute_in_worker(job_key, queue_s, run_s):
+    """Claim and execute one run inside its supervised child process."""
     close_old_connections()
     try:
         time.sleep(queue_s)
         run = Run.objects.get(job_key=job_key)
-        claimed = Run.objects.filter(pk=run.pk, state=Run.QUEUED).update(state=Run.RUNNING, started_at=timezone.now())
+        claimed = Run.objects.filter(pk=run.pk, state=Run.QUEUED).update(
+            state=Run.RUNNING, started_at=timezone.now(), heartbeat_at=timezone.now()
+        )
         if not claimed:
             return
         run.refresh_from_db()
@@ -95,13 +239,15 @@ def _execute(job_key, queue_s, run_s):
             run.state, run.error = Run.COMPLETED, ""
         except RunFailed as exc:
             run.state, run.error = Run.FAILED, str(exc)
-        except Exception as exc:  # noqa: BLE001  the worker must never take the web process down (MLE-NF-003)
+        except Exception as exc:  # noqa: BLE001  one failed model must not take down the web process
             logger.exception("Run %s failed unexpectedly: %s", job_key, exc)
             run.state, run.error = Run.FAILED, "The run stopped unexpectedly. Check the dataset and start it again."
         run.finished_at = timezone.now()
-        # Do not resurrect a job whose worker lease expired while fitting.
+        # Do not resurrect a job whose worker lease expired or timed out while fitting.
         Run.objects.filter(pk=run.pk, state=Run.RUNNING).update(
-            result=run.result, state=run.state, error=run.error, finished_at=run.finished_at)
+            result=run.result, state=run.state, error=run.error, finished_at=run.finished_at,
+            heartbeat_at=timezone.now(),
+        )
     finally:
         close_old_connections()
 

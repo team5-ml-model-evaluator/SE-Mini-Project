@@ -48,10 +48,9 @@ class RunBatch(models.Model):
 
 
 class Run(models.Model):
-    """One training run and its state.
+    """One training run, its persisted configuration, result and worker state.
 
-    STAND-IN: RunsApp owns this record in the SAD (TrainingJob). The WebUI only reads it.
-    The fields match the status interface: job_key, state, started_at, elapsed_s, error.
+    The heartbeat is refreshed by the supervisor while the isolated training process is alive.
     """
 
     QUEUED, RUNNING, COMPLETED, FAILED = "Queued", "Running", "Completed", "Failed"
@@ -64,6 +63,7 @@ class Run(models.Model):
     run_config = models.JSONField()
     state = models.CharField(max_length=10, default=QUEUED)
     created_at = models.DateTimeField(auto_now_add=True)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
