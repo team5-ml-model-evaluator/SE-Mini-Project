@@ -1,0 +1,34 @@
+{% extends "webui/base.html" %}
+{% block title %}Dataset catalogue{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <h1>Dataset catalogue</h1>
+    <p class="lede mb-0">Metadata and ownership only; uploaded files and CSV contents are not displayed.</p>
+  </div>
+  <a class="btn btn-outline-primary" href="{% url 'admin_dashboard' %}">Administrator dashboard</a>
+</div>
+{% if datasets %}
+<div class="table-wrap" tabindex="0" role="region" aria-label="Dataset catalogue, scrollable">
+  <table class="table table-hover">
+    <caption>Stored datasets and owners</caption>
+    <thead>
+      <tr><th scope="col">Dataset</th><th scope="col">Owner</th><th scope="col">Rows</th><th scope="col">Columns</th><th scope="col">Uploaded (UTC)</th></tr>
+    </thead>
+    <tbody>
+    {% for dataset in datasets %}
+      <tr>
+        <th scope="row">{{ dataset.original_name }}</th>
+        <td>{{ dataset.owner.get_username }}</td>
+        <td>{{ dataset.rows }}</td>
+        <td>{{ dataset.column_count }}</td>
+        <td>{{ dataset.created_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel empty"><p class="mb-0">No datasets have been uploaded.</p></div>
+{% endif %}
+{% endblock %}

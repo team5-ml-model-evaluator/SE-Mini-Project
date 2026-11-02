@@ -1,0 +1,57 @@
+{% extends "webui/base.html" %}
+{% block title %}Manage accounts{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+  <div>
+    <h1>Manage accounts</h1>
+    <p class="lede mb-0">Deactivated accounts cannot sign in. Account records are retained.</p>
+  </div>
+  <a class="btn btn-outline-primary" href="{% url 'admin_dashboard' %}">Administrator dashboard</a>
+</div>
+<form method="get" role="search" class="d-flex flex-wrap align-items-end gap-2 mb-4">
+  <div>
+    <label for="account-search">Search username or email</label>
+    <input class="form-control" id="account-search" type="search" name="q" value="{{ query }}">
+  </div>
+  <button class="btn btn-primary" type="submit">Search</button>
+  {% if query %}<a class="btn btn-outline-secondary" href="{% url 'admin_users' %}">Clear search</a>{% endif %}
+</form>
+{% if accounts %}
+<div class="table-wrap" tabindex="0" role="region" aria-label="User accounts, scrollable">
+  <table class="table table-hover">
+    <caption>Registered user accounts</caption>
+    <thead>
+      <tr><th scope="col">Username</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Action</th></tr>
+    </thead>
+    <tbody>
+    {% for account in accounts %}
+      <tr>
+        <th scope="row">{{ account.get_username }}</th>
+        <td>{{ account.email|default:"—" }}</td>
+        <td>{% if account.is_active %}Active{% else %}Deactivated{% endif %}</td>
+        <td>
+          {% if account.is_superuser %}
+            Superuser account protected
+          {% elif account.pk == user.pk %}
+            Your account cannot be deactivated
+          {% elif account.is_active %}
+            <form method="post" action="{% url 'admin_user_status' account.pk 'deactivate' %}">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger" type="submit" aria-label="Deactivate {{ account.get_username }}">Deactivate</button>
+            </form>
+          {% else %}
+            <form method="post" action="{% url 'admin_user_status' account.pk 'reactivate' %}">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-primary" type="submit" aria-label="Reactivate {{ account.get_username }}">Reactivate</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel empty"><p class="mb-0">No accounts match your search.</p></div>
+{% endif %}
+{% endblock %}

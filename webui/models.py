@@ -12,7 +12,7 @@ def upload_path(instance, filename):
 
 class Dataset(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="datasets")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="datasets")
     original_name = models.CharField(max_length=255)
     file = models.FileField(upload_to=upload_path)
     rows = models.PositiveIntegerField()
@@ -33,8 +33,8 @@ class Dataset(models.Model):
 
 class RunBatch(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="run_batches")
-    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="run_batches")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="run_batches")
+    dataset = models.ForeignKey(Dataset, on_delete=models.PROTECT, related_name="run_batches")
     task = models.CharField(max_length=14, choices=[("classification", "Classification"), ("regression", "Regression")])
     run_config = models.JSONField()
     active = models.BooleanField(default=True)
@@ -57,8 +57,8 @@ class Run(models.Model):
     STATES = [QUEUED, RUNNING, COMPLETED, FAILED]
 
     job_key = models.CharField(max_length=20, unique=True)
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="runs")
-    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="runs")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="runs")
+    dataset = models.ForeignKey(Dataset, on_delete=models.PROTECT, related_name="runs")
     batch = models.ForeignKey(RunBatch, on_delete=models.SET_NULL, related_name="runs", null=True, blank=True)
     run_config = models.JSONField()
     state = models.CharField(max_length=10, default=QUEUED)
