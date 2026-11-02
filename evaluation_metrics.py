@@ -11,7 +11,7 @@ from sklearn.metrics import (
 )
 
 
-def calculate_classification_metrics(y_true, y_pred):
+def calculate_classification_metrics(y_true, y_pred, labels=None):
     """Calculate standard classification evaluation metrics."""
     if len(y_true) == 0 or len(y_pred) == 0:
         raise ValueError("Actual and predicted values cannot be empty.")
@@ -38,7 +38,7 @@ def calculate_classification_metrics(y_true, y_pred):
                 y_true, y_pred, average="weighted", zero_division=0
             )
         ),
-        "confusion_matrix": confusion_matrix(y_true, y_pred).tolist(),
+        "confusion_matrix": confusion_matrix(y_true, y_pred, labels=labels).tolist(),
     }
 
 

@@ -31,6 +31,22 @@ class Dataset(models.Model):
         return [c["name"] for c in self.profile["columns"]]
 
 
+class RunBatch(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="run_batches")
+    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="run_batches")
+    task = models.CharField(max_length=14, choices=[("classification", "Classification"), ("regression", "Regression")])
+    run_config = models.JSONField()
+    active = models.BooleanField(default=True)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["owner"], condition=models.Q(active=True),
+                                               name="one_active_batch_per_owner")]
+
+
 class Run(models.Model):
     """One training run and its state.
 
@@ -44,6 +60,7 @@ class Run(models.Model):
     job_key = models.CharField(max_length=20, unique=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="runs")
     dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="runs")
+    batch = models.ForeignKey(RunBatch, on_delete=models.SET_NULL, related_name="runs", null=True, blank=True)
     run_config = models.JSONField()
     state = models.CharField(max_length=10, default=QUEUED)
     created_at = models.DateTimeField(auto_now_add=True)

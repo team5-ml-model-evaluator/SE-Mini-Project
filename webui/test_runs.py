@@ -229,7 +229,7 @@ class ResultsTests(RunTestCase):
         self.assertEqual(run.state, "Completed")
         html = self.page(run)
         for name in ("Accuracy", "Precision", "Recall", "F1-score"):
-            self.assertRegex(html, rf'<th scope="row">{name}</th><td class="num">\d\.\d{{4}}</td>')
+            self.assertRegex(html, rf'<th scope="row">{name}</th><td class="num">\d{{1,3}}\.\d{{2}}%</td>')
 
     def test_confusion_matrix_is_a_table_with_labelled_axes_and_matching_totals(self):
         _, run, _ = self.start()
@@ -252,7 +252,7 @@ class ResultsTests(RunTestCase):
         self.assertEqual(run.state, "Completed", run.error)
         html = self.page(run)
         for name in ("MAE", "MSE", "RMSE", "R&sup2;"):
-            self.assertRegex(html, rf'<th scope="row">{name} [^<]*</th><td class="num">-?\d+\.\d{{4}}</td>')
+            self.assertRegex(html, rf'<th scope="row">{name} [^<]*</th><td class="num">-?\d+\.\d{{2}}</td>')
         self.assertNotIn("Confusion matrix", html)
         self.assertAlmostEqual(run.result["rmse"] ** 2, run.result["mse"], places=6)
 
@@ -266,11 +266,18 @@ class ResultsTests(RunTestCase):
                 self.assertIn("<caption>", table)
                 self.assertIn('scope="col"', table)
 
+    @override_settings(STANDIN_FORCE_BASELINE=True)
     def test_results_say_they_are_placeholders_while_the_worker_is_a_stand_in(self):
         _, run, _ = self.start()
         html = self.page(run)
         self.assertIn("Placeholder results", html)
         self.assertIn("not from Random Forest", html)
+
+    def test_results_do_not_show_placeholder_warning_when_real_worker_runs(self):
+        _, run, _ = self.start()
+        html = self.page(run)
+        self.assertNotIn("Placeholder results", html)
+        self.assertNotIn("The training worker is not connected yet", html)
 
     def test_no_chart_without_a_table(self):
         _, run, _ = self.start()

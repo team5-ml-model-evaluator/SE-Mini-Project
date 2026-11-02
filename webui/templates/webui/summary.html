@@ -15,6 +15,14 @@
 <form method="post" action="{% url 'start_run' dataset.id %}" class="mb-3">{% csrf_token %}
   <button type="submit" class="btn btn-primary">Start run</button>
 </form>
+<section class="panel" aria-labelledby="run-all-title">
+  <h2 id="run-all-title" class="h5">Run &amp; compare suitable models</h2>
+  <p>Evaluate all {{ suitable_count }} {{ algorithm.task }} models using this target, the same input fields and the same train/test split. Models run one at a time, and their results appear on one dashboard.</p>
+  <form method="post" action="{% url 'start_batch' dataset.id %}">{% csrf_token %}
+    <input type="hidden" name="batch_token" value="{{ batch_token }}">
+    <button type="submit" class="btn btn-primary">Run &amp; compare all {{ suitable_count }} models</button>
+  </form>
+</section>
 <a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'pipeline_step' dataset.id %}">Change columns</a>
 <a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'model_step' dataset.id %}">Change algorithm</a>
 {% endblock %}

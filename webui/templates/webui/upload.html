@@ -8,9 +8,9 @@
   {% csrf_token %}
   <div class="dropzone mb-4">
     <label class="form-label" for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
-    <input class="form-control{% if form.file.errors %} is-invalid{% endif %}" type="file" name="file" id="{{ form.file.id_for_label }}" accept=".csv,text/csv" required aria-describedby="file-help">
+    <input class="form-control{% if form.file.errors %} is-invalid{% endif %}" type="file" name="file" id="{{ form.file.id_for_label }}" accept=".csv,text/csv" required aria-describedby="file-help{% if form.file.errors %} id_file_error{% endif %}"{% if form.file.errors %} aria-invalid="true"{% endif %}>
     <div id="file-help" class="form-text">{{ form.file.help_text }}</div>
-    {% for error in form.file.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    {% if form.file.errors %}<div id="id_file_error">{% for error in form.file.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>{% endif %}
     <ul class="rules" aria-label="Upload rules"><li>.csv</li><li>UTF-8</li><li>header row</li><li>20+ rows</li><li>2+ columns</li><li>max 50 MB</li></ul>
   </div>
   <button type="submit" class="btn btn-primary">Upload dataset</button>
