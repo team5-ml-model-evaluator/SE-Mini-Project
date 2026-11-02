@@ -25,7 +25,10 @@ from .target_validation import validate_classification_target
 logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="model-comparison")
 TOKEN_SALT = "webui.run-batch"
-LEASE_SECONDS = 90
+LEASE_SECONDS = int(
+    getattr(settings, "RUN_WORKER_LEASE_SECONDS", 7)
+)
+HEARTBEAT_INTERVAL_SECONDS = 2
 _lease_lock = threading.Lock()
 _live_batches = set()
 _heartbeat_thread = None
@@ -58,7 +61,7 @@ def _refresh_leases():
 
 def _heartbeat_loop():
     while True:
-        time.sleep(15)
+        time.sleep(HEARTBEAT_INTERVAL_SECONDS)
         close_old_connections()
         try:
             _refresh_leases()
