@@ -3,7 +3,7 @@ import pytest
 from sklearn.datasets import load_diabetes, load_iris
 from sklearn.model_selection import train_test_split
 
-from baseline_model import available_models, create_model, run_baseline
+from baseline_model import available_models, create_model, run_baseline, HYPERPARAMETER_SPECS, default_hyperparameters, validate_hyperparameters
 
 
 CLASSIFICATION_MODELS = [
@@ -89,3 +89,60 @@ def test_regression_model_trains_and_predicts(model_name):
     assert hasattr(result["model"], "n_features_in_")  # fitted estimator
     assert predictions.shape == (len(X_test),)
     assert np.isfinite(predictions).all()
+
+
+def test_catalogue_has_hyperparameter_specs_for_all_models():
+    assert set(HYPERPARAMETER_SPECS) == (
+        set(CLASSIFICATION_MODELS) | set(REGRESSION_MODELS)
+    )
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    CLASSIFICATION_MODELS + REGRESSION_MODELS,
+)
+def test_default_hyperparameters_are_valid(model_name):
+    defaults = default_hyperparameters(model_name)
+    assert validate_hyperparameters(model_name, defaults) == defaults
+
+
+def test_valid_custom_random_forest_parameters():
+    params = validate_hyperparameters(
+        "random_forest",
+        {"n_estimators": 150, "max_depth": 12},
+    )
+    assert params["n_estimators"] == 150
+    assert params["max_depth"] == 12
+    assert params["min_samples_split"] == 2
+
+
+def test_custom_parameters_reach_model():
+    model = create_model(
+        "classification",
+        "random_forest",
+        hyperparameters={"n_estimators": 150, "max_depth": 12},
+    )
+    assert model.n_estimators == 150
+    assert model.max_depth == 12
+
+
+@pytest.mark.parametrize(
+    ("model_name", "params"),
+    [
+        ("random_forest", {"n_estimators": 0}),
+        ("knn", {"n_neighbors": 101}),
+        ("logistic_regression", {"C": -1}),
+        ("decision_tree", {"criterion": "invalid"}),
+        ("svm", {"unknown_parameter": 1}),
+        ("linear_regression", {"fit_intercept": "maybe"}),
+        ("random_forest", {"n_estimators": 2.5}),
+    ],
+)
+def test_invalid_hyperparameters_are_rejected(model_name, params):
+    with pytest.raises(ValueError):
+        validate_hyperparameters(model_name, params)
+
+
+def test_unknown_model_has_no_hyperparameter_defaults():
+    with pytest.raises(ValueError, match="Unsupported model"):
+        default_hyperparameters("unknown_model")
