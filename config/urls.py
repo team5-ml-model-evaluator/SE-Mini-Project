@@ -15,6 +15,8 @@ def dashboard(request):
 
 
 urlpatterns = [
+    # Catalogue routes live under admin/catalogue/ and must match before the Django admin catch-all.
+    path("", include("datasets.urls")),
     path("admin/", admin.site.urls),
     path("register/", register, name="register"),
     path(
@@ -29,4 +31,5 @@ urlpatterns = [
     path("dashboard/", dashboard, name="dashboard"),
     path("", include("jobs.urls")),
     path("", include("webui.urls")),
+    path("preprocessing/", include("preprocessing.urls")),
 ]
