@@ -8,7 +8,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Dataset, Run
-from .tests import WebUITestCase, upload
+from .tests import WebUITestCase, upload, make_csv
+
+import time
+
+import shutil
+import tempfile
+
+from django.contrib.auth import get_user_model
+from django.test import TransactionTestCase
 
 CLASSIFIER, REGRESSOR = "random_forest", "linear_regression"
 
@@ -223,6 +231,7 @@ class FailureTests(RunTestCase):
         self.assertNotIn("/secret/path", html)
 
 
+
 class ResultsTests(RunTestCase):
     def test_classification_shows_the_four_metrics_in_a_numeric_table(self):
         _, run, _ = self.start()
@@ -296,3 +305,93 @@ class ResultsTests(RunTestCase):
         _, run, _ = self.start()
         html = self.page(run)
         self.assertGreaterEqual(len(re.findall(r'class="table-wrap" tabindex="0" role="region" aria-label="[^"]+"', html)), 2)
+
+
+class AsyncWorkerFailureTests(TransactionTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.media_root = tempfile.mkdtemp(prefix="async-run-test-")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.media_root, ignore_errors=True)
+        super().tearDownClass()
+
+    @override_settings(
+
+        PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
+        STANDIN_RUN_SYNC=False,
+        STANDIN_QUEUE_SECONDS=0,
+        STANDIN_RUN_SECONDS=0,
+    )
+    def test_async_worker_failure_is_reported_within_10_seconds(self):
+        from unittest import mock
+
+        # Use a separate media directory for this test.
+        from django.test import override_settings
+
+        with override_settings(MEDIA_ROOT=self.media_root):
+            User = get_user_model()
+            user = User.objects.create_user(
+                "async_worker_test",
+                password="test-password",
+            )
+            self.client.force_login(user)
+
+            # Create a dataset.
+            upload(self.client, make_csv())
+            dataset = Dataset.objects.latest("created_at")
+
+            # Prepare the saved model configuration.
+            features = [
+                column for column in dataset.column_names
+                if column != "bought"
+            ]
+
+            session = self.client.session
+            session[f"draft-{dataset.id}"] = {
+                "target_column": "bought",
+                "feature_columns": features,
+                "excluded_columns": [],
+                "algorithm": CLASSIFIER,
+            }
+            session.save()
+
+            start_time = time.monotonic()
+
+            with mock.patch(
+                "webui.standins.runs._train_and_score",
+                side_effect=RuntimeError("simulated worker failure"),
+            ):
+                response = self.client.post(
+                    reverse("start_run", args=[dataset.id])
+                )
+                self.assertEqual(response.status_code, 302)
+
+                run = Run.objects.latest("created_at")
+                deadline = start_time + 10
+                data = None
+
+                while time.monotonic() < deadline:
+                    data = self.client.get(
+                        reverse("run_status", args=[run.job_key])
+                    ).json()
+
+                    if data["state"] == "Failed":
+                        break
+
+                    time.sleep(0.1)
+
+            elapsed = time.monotonic() - start_time
+
+            self.assertIsNotNone(data)
+            self.assertEqual(data["state"], "Failed")
+            self.assertTrue(data["error"])
+            self.assertLess(elapsed, 10)
+
+            # Verify the application still serves the run page.
+            response = self.client.get(
+                reverse("run_detail", args=[run.job_key])
+            )
+            self.assertEqual(response.status_code, 200)
