@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     "webui",
     "datasets",
     "preprocessing",
+    "pipeline",
 ]
 
 MIDDLEWARE = [
