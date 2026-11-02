@@ -1,0 +1,25 @@
+{% extends "webui/base.html" %}
+{% block title %}Administrator dashboard{% endblock %}
+{% block content %}
+<h1>Administrator dashboard</h1>
+<p class="lede">Administrator access granted. You can manage the ML Model Evaluator.</p>
+<nav aria-label="Administrator tools" class="d-flex flex-wrap gap-2 mb-4">
+  <a class="btn btn-primary" href="{% url 'admin_users' %}">Manage accounts</a>
+  <a class="btn btn-outline-primary" href="{% url 'admin_datasets' %}">Dataset catalogue</a>
+</nav>
+<div class="table-wrap" tabindex="0" role="region" aria-label="System totals, scrollable">
+  <table class="table">
+    <caption>System totals</caption>
+    <thead><tr><th scope="col">Record type</th><th scope="col">Total</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Registered users</th><td>{{ total_users }}</td></tr>
+      <tr><th scope="row">Active users</th><td>{{ active_users }}</td></tr>
+      <tr><th scope="row">Deactivated users</th><td>{{ deactivated_users }}</td></tr>
+      <tr><th scope="row">Datasets</th><td>{{ total_datasets }}</td></tr>
+      <tr><th scope="row">Training runs</th><td>{{ total_runs }}</td></tr>
+      <tr><th scope="row">Run batches</th><td>{{ total_batches }}</td></tr>
+      <tr><th scope="row">Audit events</th><td>{{ total_audit_events }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
