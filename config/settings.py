@@ -4,6 +4,20 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value.")
+
+
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
@@ -21,6 +35,12 @@ ALLOWED_HOSTS = [
         "localhost,127.0.0.1,testserver",
     ).split(",")
     if host.strip()
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
 ]
 
 INSTALLED_APPS = [
@@ -115,10 +135,24 @@ LOGOUT_REDIRECT_URL = "login"
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SAMESITE = "Lax"
-
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", not DEBUG)
 
 X_FRAME_OPTIONS = "DENY"
+SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = (
+    int(os.environ.get("SECURE_HSTS_SECONDS", "0")) if not DEBUG else 0
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+    _env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False) if not DEBUG else False
+)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+if _env_bool("TRUST_X_FORWARDED_PROTO", False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 STANDIN_QUEUE_SECONDS = 2
 STANDIN_RUN_SECONDS = 8
