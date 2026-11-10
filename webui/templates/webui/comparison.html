@@ -30,10 +30,34 @@
 
 {% if comparison %}
 <div id="comparison-results">
+{% if comparison.best_model %}
+<div class="panel p-3 mb-4 d-flex align-items-center gap-3" style="border-left: 4px solid #22c55e; background: rgba(34, 197, 94, 0.08);">
+  <div class="fs-2" aria-hidden="true">🏆</div>
+  <div>
+    <div class="small text-success text-uppercase fw-bold" style="letter-spacing: 0.05em;">
+      {% if comparison.best_model.is_tied %}Top Performing Models (Tie){% else %}Top Performing Model{% endif %}
+    </div>
+    <div class="h5 mb-1 text-light">
+      <strong>{{ comparison.best_model.name }}</strong>
+    </div>
+    <div class="small text-secondary">
+      Best performing model for this {{ comparison.task }} evaluation with the {{ comparison.best_model.summary }}.
+    </div>
+  </div>
+</div>
+{% endif %}
 {% include "webui/_charts.html" %}
 <section aria-labelledby="comparison-title">
   <h2 id="comparison-title">{{ comparison.task|capfirst }} comparison</h2>
-  <a class="btn btn-outline-secondary mb-3" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a>
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <a class="btn btn-primary" href="{% url 'comparison_report' dataset.id 'pdf' %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">
+      Download Comparison Report (PDF)
+    </a>
+    <a class="btn btn-outline-secondary" href="{% url 'comparison_report' dataset.id 'html' %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}" target="_blank">
+      View Client HTML
+    </a>
+    <a class="btn btn-outline-secondary" href="{% url 'run_comparison_csv' dataset.id %}?{% for column in comparison.columns %}runs={{ column.run.job_key|urlencode }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Download comparison CSV</a>
+  </div>
   <p class="text-secondary small mb-3">Target: <strong class="mono text-light">{{ comparison.target }}</strong> · Displaying evaluation metrics side by side.</p>
   <div class="table-wrap mb-4" tabindex="0" role="region" aria-label="Run comparison, scroll horizontally to see every run">
   <table class="table" id="comparison-values">
@@ -41,6 +65,7 @@
     <thead><tr><th scope="col">Metric</th>{% for column in comparison.columns %}
       <th scope="col">
         <a href="{% url 'run_detail' column.run.job_key %}" class="fw-bold text-decoration-none text-light">{{ column.algorithm.label }}</a>
+        {% if column.is_best %}<br><span class="badge bg-success mt-1">★ Best Model</span>{% endif %}
         {% if column.run.result.standin %}<br><span class="badge text-bg-secondary">Placeholder baseline</span>{% endif %}
       </th>
     {% endfor %}</tr></thead>

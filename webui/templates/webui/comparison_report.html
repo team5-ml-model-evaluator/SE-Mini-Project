@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model Comparison Report · {{ dataset.original_name }}</title>
+  <style>
+    body { font: 15px/1.5 system-ui, -apple-system, sans-serif; color: #172536; margin: 2rem auto; padding: 0 1.5rem; max-width: 65rem; background: #fafbfc; }
+    header.report-header { border-bottom: 3px solid #007e87; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    .eyebrow { font-size: 0.85rem; font-weight: 700; color: #176c85; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.5rem; }
+    h1 { font-size: 2.2rem; color: #112a3a; margin: 0 0 0.4rem; letter-spacing: -0.03em; }
+    .meta-subtitle { color: #516779; font-size: 1.1rem; margin: 0; }
+    
+    .winner-card { background: #ecfdf5; border: 1px solid #a7f3d0; border-left: 5px solid #10b981; border-radius: 6px; padding: 1.2rem; margin: 1.5rem 0; }
+    .winner-eyebrow { font-size: 0.75rem; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+    .winner-title { font-size: 1.4rem; font-weight: 700; color: #065f46; margin: 0 0 0.3rem; }
+    .winner-desc { color: #047857; margin: 0; font-size: 0.95rem; }
+
+    table { border-collapse: collapse; width: 100%; margin: 1.2rem 0 2rem; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    th, td { padding: 0.75rem 1rem; border: 1px solid #c7d2df; text-align: left; vertical-align: middle; }
+    thead { background: #e6eef7; }
+    thead th { font-weight: 700; color: #173a61; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    td.num { font-variant-numeric: tabular-nums; font-family: monospace; font-size: 1rem; }
+    .badge-best { display: inline-block; background: #10b981; color: #fff; font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; margin-top: 0.25rem; }
+
+    .guide-box { background: #f0fdfa; border: 1px solid #ccfbf1; border-radius: 6px; padding: 1.2rem; margin: 1.5rem 0; font-size: 0.95rem; }
+    .guide-box h2 { font-size: 1.1rem; color: #0f766e; margin-top: 0; margin-bottom: 0.6rem; }
+    .guide-box ul { margin: 0; padding-left: 1.2rem; color: #134e4a; }
+    .guide-box li { margin-bottom: 0.4rem; }
+
+    .scope-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1.2rem; margin: 1.5rem 0; }
+    .scope-box h2 { font-size: 1.1rem; color: #1e293b; margin-top: 0; }
+    .scope-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+    .scope-item dt { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+    .scope-item dd { font-size: 1rem; font-weight: 600; color: #0f172a; margin: 0.2rem 0 0; }
+
+    footer { border-top: 1px solid #cbd5e1; padding-top: 1rem; margin-top: 2rem; color: #64748b; font-size: 0.85rem; display: flex; justify-content: space-between; }
+    @media print { body { margin: 0; padding: 0; background: #fff; } .winner-card, table, .guide-box, .scope-box { box-shadow: none; break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <p class="eyebrow">MODEL EVALUATOR · MULTI-MODEL BENCHMARK</p>
+    <h1>Executive Comparison Report</h1>
+    <p class="meta-subtitle">{{ dataset.original_name }} · Task: {{ comparison.task|capfirst }} · Target Field: <strong>{{ comparison.target }}</strong></p>
+  </header>
+
+  <main>
+    {% if comparison.best_model %}
+    <section class="winner-card" aria-label="Winning Model Recommendation">
+      <div class="winner-eyebrow">{% if comparison.best_model.is_tied %}Recommended Models (Tie){% else %}Recommended Best Model{% endif %}</div>
+      <div class="winner-title">🏆 {{ comparison.best_model.name }}</div>
+      <p class="winner-desc">Achieved the {{ comparison.best_model.summary }} across {{ comparison.columns|length }} benchmarked models.</p>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2 style="color: #173a61; margin-bottom: 0.5rem;">Benchmark Matrix</h2>
+      <p style="color: #64748b; font-size: 0.9rem; margin-top: 0;">Scores describe held-out evaluation test partitions under identical preprocessing and split ratios.</p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Metric</th>
+            {% for column in comparison.columns %}
+            <th scope="col">
+              {{ column.algorithm.label }}
+              {% if column.is_best %}<br><span class="badge-best">★ Best Model</span>{% endif %}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in comparison.rows %}
+          <tr>
+            <th scope="row"><strong>{{ row.label }}</strong></th>
+            {% for val in row.display_values %}
+            <td class="num">{{ val }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="guide-box">
+      <h2>Client Evaluation Guide</h2>
+      {% if comparison.task == "classification" %}
+      <ul>
+        <li><strong>Accuracy:</strong> Percentage of predictions that matched the actual outcome (higher is better).</li>
+        <li><strong>Precision:</strong> How reliably positive predictions indicate actual positive instances (higher is better).</li>
+        <li><strong>Recall:</strong> Proportion of actual positive instances successfully captured by the model (higher is better).</li>
+        <li><strong>F1-Score:</strong> Harmonic balance between precision and recall, especially valuable for skewed or imbalanced data.</li>
+      </ul>
+      {% else %}
+      <ul>
+        <li><strong>MAE (Mean Absolute Error):</strong> Average absolute difference between predicted and actual numbers in the target's original units (lower is better).</li>
+        <li><strong>RMSE (Root Mean Squared Error):</strong> Quadratic error metric penalizing larger mistakes more heavily (lower is better).</li>
+        <li><strong>R² (Coefficient of Determination):</strong> Proportion of variance explained by the model; 1.0 represents a perfect fit (higher is better).</li>
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="scope-box">
+      <h2>Evaluation Scope & Provenance</h2>
+      <dl class="scope-grid">
+        <div class="scope-item"><dt>Dataset File</dt><dd>{{ dataset.original_name }}</dd></div>
+        <div class="scope-item"><dt>Dimensions</dt><dd>{{ dataset.rows }} rows · {{ dataset.column_count }} columns</dd></div>
+        <div class="scope-item"><dt>Target Column</dt><dd>{{ comparison.target }}</dd></div>
+        <div class="scope-item"><dt>Task Type</dt><dd>{{ comparison.task|capfirst }}</dd></div>
+        <div class="scope-item"><dt>Models Evaluated</dt><dd>{{ comparison.columns|length }}</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <footer>
+    <span>Generated by Web Based ML Model Evaluator</span>
+    <span>Client-Ready Executive Summary</span>
+  </footer>
+</body>
+</html>
+

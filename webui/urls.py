@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/evaluations/<uuid:pk>/status", views.batch_status, name="batch_status"),
     path("datasets/<uuid:pk>/compare/", views.run_comparison, name="run_comparison"),
     path("datasets/<uuid:pk>/compare.csv", views.run_comparison_csv, name="run_comparison_csv"),
+    path("datasets/<uuid:pk>/compare/report.<str:format>", views.comparison_report, name="comparison_report"),
     path("runs/<str:job_key>/report.<str:format>", views.run_report, name="run_report"),
     path("runs/<str:job_key>/", views.run_detail, name="run_detail"),
     path("api/runs/<str:job_key>/status", views.run_status, name="run_status"),

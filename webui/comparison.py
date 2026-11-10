@@ -84,8 +84,32 @@ def build_comparison(selected_runs):
     if len({column["task"] for column in columns}) != 1:
         raise ValidationError("Choose runs with the same task type (classification or regression).")
     task = columns[0]["task"]
+    primary_metric = "accuracy" if task == "classification" else "rmse"
+    primary_higher = (task == "classification")
+    metric_values = [Decimal(str(run.result[primary_metric])) for run in runs]
+    best_val = max(metric_values) if primary_higher else min(metric_values)
+    best_indices = [i for i, v in enumerate(metric_values) if v == best_val]
+
+    for i, col in enumerate(columns):
+        col["is_best"] = (i in best_indices)
+
+    best_algorithms = [columns[i]["algorithm"].label for i in best_indices]
+    best_name = ", ".join(best_algorithms)
+    metric_label = "Accuracy" if task == "classification" else "RMSE"
+    metric_formatted = format_metric(task, best_val)
+    summary_text = f"highest Accuracy ({metric_formatted})" if task == "classification" else f"lowest RMSE ({metric_formatted})"
+
+    best_model_info = {
+        "name": best_name,
+        "is_tied": len(best_indices) > 1,
+        "metric_name": metric_label,
+        "metric_value": metric_formatted,
+        "summary": summary_text,
+    }
+
     return {
         "columns": columns, "task": task, "target": columns[0]["target"],
+        "best_model": best_model_info,
         "rows": [{"key": key, "label": label, "values": [str(run.result[key]) for run in runs],
                   "display_values": [format_metric(task, run.result[key]) for run in runs]}
                  for key, label in METRICS[task]],

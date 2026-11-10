@@ -262,3 +262,143 @@ def report_pdf(report):
 
     document.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
+
+
+def comparison_report_pdf(comparison, dataset):
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40,
+                                 topMargin=40, bottomMargin=42, title=f"Comparison Report - {dataset.original_name}")
+    styles = getSampleStyleSheet()
+    for style in styles.byName.values():
+        style.fontName = "ReportSans"
+    styles.add(ParagraphStyle("CompReportCell", fontName="ReportSans", fontSize=9, leading=13, spaceAfter=0))
+    styles.add(ParagraphStyle("CompReportCellBold", fontName="ReportSansBold", fontSize=9, leading=13, spaceAfter=0))
+    styles.add(ParagraphStyle("CompClientEyebrow", fontName="ReportSansBold", fontSize=9, leading=13,
+                              textColor=colors.HexColor("#176c85"), spaceAfter=6))
+    styles.add(ParagraphStyle("CompClientTitle", fontName="ReportSansBold", fontSize=22, leading=28,
+                              textColor=colors.HexColor("#112a3a"), spaceAfter=6))
+    styles.add(ParagraphStyle("CompClientModel", fontName="ReportSans", fontSize=11, leading=16,
+                              textColor=colors.HexColor("#516779"), spaceAfter=14))
+    styles.add(ParagraphStyle("CompWinnerTitle", fontName="ReportSansBold", fontSize=13, leading=17,
+                              textColor=colors.HexColor("#065f46"), spaceAfter=4))
+    styles.add(ParagraphStyle("CompWinnerDesc", fontName="ReportSans", fontSize=9, leading=14,
+                              textColor=colors.HexColor("#047857")))
+    styles.add(ParagraphStyle("CompClientSmall", fontName="ReportSans", fontSize=8, leading=12,
+                              textColor=colors.HexColor("#516779"), spaceAfter=6))
+
+    glyphs = pdfmetrics.getFont("ReportSans").face.charToGlyph
+    escaped_unicode = False
+
+    def paragraph(value, style="CompReportCell"):
+        nonlocal escaped_unicode
+        characters = []
+        for char in str(value):
+            if char in "\n\r\t" or ord(char) in glyphs:
+                characters.append(char)
+            else:
+                escaped_unicode = True
+                characters.append(f"\\u{ord(char):04x}" if ord(char) <= 0xffff else f"\\U{ord(char):08x}")
+        return Paragraph(escape("".join(characters)).replace("\n", "<br/>"), styles[style])
+
+    width = A4[0] - 80
+    story = [
+        paragraph("MODEL EVALUATOR / MULTI-MODEL BENCHMARK", "CompClientEyebrow"),
+        paragraph("Executive Comparison Report", "CompClientTitle"),
+        paragraph(f"{dataset.original_name} · Task: {comparison['task'].capitalize()} · Target: {comparison['target']}", "CompClientModel"),
+    ]
+
+    # Executive Winner Card
+    best = comparison.get("best_model", {})
+    winner_name = best.get("name", "N/A")
+    winner_reason = f"Top-performing model for this evaluation with the {best.get('summary', '')}."
+    card_data = [[
+        paragraph("RECOMMENDED BEST MODEL", "CompClientEyebrow"),
+    ], [
+        paragraph(f"Winner: {winner_name}", "CompWinnerTitle"),
+    ], [
+        paragraph(winner_reason, "CompWinnerDesc"),
+    ]]
+    winner_card = LongTable(card_data, colWidths=[width], hAlign="LEFT")
+    winner_card.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#ecfdf5")),
+        ("LINEBELOW", (0, -1), (-1, -1), 2, colors.HexColor("#10b981")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    story.extend([winner_card, Spacer(1, 14)])
+
+    # Multi-Model Benchmark Table
+    col_count = len(comparison["columns"]) + 1
+    col_w = width / col_count
+    headers = ["Metric"] + [
+        f"{col['algorithm'].label} (*)" if col.get("is_best") else col["algorithm"].label
+        for col in comparison["columns"]
+    ]
+    table_rows = []
+    for row in comparison["rows"]:
+        table_rows.append([row["label"]] + row["display_values"])
+
+    benchmark_data = [[paragraph(c, "CompReportCellBold" if i == 0 or r == 0 else "CompReportCell")
+                       for i, c in enumerate(row_data)]
+                      for r, row_data in enumerate([headers, *table_rows])]
+    bench_table = LongTable(benchmark_data, colWidths=[col_w] * col_count, hAlign="LEFT", repeatRows=1)
+    bench_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e6eef7")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c7d2df")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.extend([
+        paragraph("Benchmark Comparison Matrix", "Heading2"),
+        paragraph("(*) Marked with asterisk indicates top-performing model on primary benchmark metric.", "CompClientSmall"),
+        bench_table,
+        Spacer(1, 14),
+    ])
+
+    # Plain-language explanation for clients
+    story.append(paragraph("Client Evaluation Guide", "Heading2"))
+    if comparison["task"] == "classification":
+        guide_text = (
+            "• Accuracy: Percentage of predictions that matched the true category.<br/>"
+            "• Precision: How reliably positive predictions indicate actual positive instances.<br/>"
+            "• Recall: The model's ability to identify all positive instances in the data.<br/>"
+            "• F1-Score: Harmonic balance between precision and recall (ideal for imbalanced classes)."
+        )
+    else:
+        guide_text = (
+            "• MAE (Mean Absolute Error): Average dollar/unit deviation between predicted and real values (lower is better).<br/>"
+            "• RMSE (Root Mean Squared Error): Error metric emphasizing larger mistakes with quadratic penalty (lower is better).<br/>"
+            "• R² (Coefficient of Determination): The fraction of variance explained by the model (1.0 = perfect fit)."
+        )
+    story.extend([paragraph(guide_text, "CompClientSmall"), Spacer(1, 10)])
+
+    # Scope Summary
+    scope_rows = [
+        ["Dataset File", dataset.original_name],
+        ["Total Rows / Columns", f"{dataset.rows} rows · {dataset.column_count} columns"],
+        ["Target Field", comparison["target"]],
+        ["Task Type", comparison["task"].capitalize()],
+        ["Models Benchmarked", f"{len(comparison['columns'])} models"],
+    ]
+    scope_data = [[paragraph(c, "CompReportCellBold" if i == 0 else "CompReportCell") for i, c in enumerate(r)] for r in [["Parameter", "Details"], *scope_rows]]
+    scope_table = LongTable(scope_data, colWidths=[width * 0.35, width * 0.65], hAlign="LEFT")
+    scope_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e6eef7")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
+        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c7d2df")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.extend([
+        paragraph("Evaluation Scope", "Heading2"),
+        scope_table,
+    ])
+
+    def footer(canvas, doc):
+        canvas.setFont("ReportSans", 8)
+        canvas.drawRightString(A4[0] - 40, 24, f"Page {doc.page}")
+
+    document.build(story, onFirstPage=footer, onLaterPages=footer)
+    return buffer.getvalue()

@@ -14,7 +14,7 @@ from .charts import comparison_chart
 from .forms import ComparisonForm, ModelForm, PipelineForm, UploadForm, error_summary
 from .matrices import matrix_window
 from .models import Dataset, Run, RunBatch
-from .reporting import build_report, comparison_csv, report_pdf
+from .reporting import build_report, comparison_csv, report_pdf, comparison_report_pdf
 from .stages import stage_list
 from .standins import runs
 from .standins.catalogue import BY_KEY
@@ -310,6 +310,29 @@ def run_comparison_csv(request, pk):
         response.status_code = 400
         return response
     return _download(comparison_csv(comparison), "text/csv; charset=utf-8", f"comparison-{dataset.id}.csv")
+
+
+@login_required
+@require_GET
+def comparison_report(request, pk, format):
+    if format not in {"html", "pdf"}:
+        raise Http404
+    dataset = _owned_dataset(request, pk)
+    form, comparison = _comparison_selection(request, dataset, True)
+    if comparison is None:
+        response = _page(request, "comparison.html", "results", dataset=dataset, form=form,
+                         comparison=None, has_runs=form.fields["runs"].queryset.exists())
+        response.status_code = 400
+        return response
+
+    safe_name = os.path.splitext(dataset.original_name)[0]
+    filename = f"comparison-report-{safe_name}.{format}"
+    if format == "pdf":
+        return _download(comparison_report_pdf(comparison, dataset), "application/pdf", filename)
+    html = render_to_string("webui/comparison_report.html", {"comparison": comparison, "dataset": dataset})
+    response = _download(html, "text/html; charset=utf-8", filename)
+    response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    return response
 
 
 @login_required
