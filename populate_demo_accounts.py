@@ -102,6 +102,19 @@ def main():
             column_count=prof_cls["column_count"],
             profile=prof_cls
         )
+        batch_cls = RunBatch.objects.create(
+            id=uuid.uuid4(),
+            owner=user,
+            dataset=d_cls,
+            task="classification",
+            active=False,
+            run_config={
+                "dataset_id": str(d_cls.id),
+                "target_column": cls_target,
+                "feature_columns": cls_features,
+                "algorithm": CLASSIFICATION_ALGOS[0],
+            }
+        )
         for algo in CLASSIFICATION_ALGOS:
             cfg = {
                 "dataset_id": str(d_cls.id),
@@ -119,12 +132,13 @@ def main():
                 job_key="r-" + uuid.uuid4().hex[:8],
                 owner=user,
                 dataset=d_cls,
+                batch=batch_cls,
                 run_config=cfg,
                 state=Run.QUEUED
             )
             _execute_in_worker(r.job_key, queue_s=0, run_s=0)
 
-        # 2. Regression Dataset (100 rows, realistic varied R2 and RMSE)
+        # 2. Regression Dataset (1,200 rows, realistic varied R2 and RMSE)
         up_reg = ContentFile(reg_bytes, name=reg_name)
         prof_reg = validate_csv(up_reg)
         up_reg.seek(0)
@@ -135,6 +149,19 @@ def main():
             rows=prof_reg["rows"],
             column_count=prof_reg["column_count"],
             profile=prof_reg
+        )
+        batch_reg = RunBatch.objects.create(
+            id=uuid.uuid4(),
+            owner=user,
+            dataset=d_reg,
+            task="regression",
+            active=False,
+            run_config={
+                "dataset_id": str(d_reg.id),
+                "target_column": reg_target,
+                "feature_columns": reg_features,
+                "algorithm": REGRESSION_ALGOS[0],
+            }
         )
         for algo in REGRESSION_ALGOS:
             cfg = {
@@ -153,12 +180,13 @@ def main():
                 job_key="r-" + uuid.uuid4().hex[:8],
                 owner=user,
                 dataset=d_reg,
+                batch=batch_reg,
                 run_config=cfg,
                 state=Run.QUEUED
             )
             _execute_in_worker(r.job_key, queue_s=0, run_s=0)
 
-        print(f"  ✓ Created 2 realistic datasets & 8 differentiated models for {uname}")
+        print(f"  ✓ Created 2 realistic datasets, 2 comparison batches & 8 models for {uname}")
 
     print("\nSUCCESS: All accounts now have realistic, non-100% benchmark results!")
 
