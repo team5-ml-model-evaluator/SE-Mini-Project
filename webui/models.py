@@ -81,7 +81,10 @@ class Run(models.Model):
         if self.started_at is None:
             return None
         end = self.finished_at or timezone.now()
-        return round((end - self.started_at).total_seconds(), 1)
+        secs = (end - self.started_at).total_seconds()
+        if 0 < secs < 0.1:
+            return round(max(secs, 0.01), 2)
+        return round(secs, 1)
 
 class AuditLogQuerySet(models.QuerySet):
     def update(self, **kwargs):
