@@ -133,7 +133,7 @@ def _validate_target(dataset, config, algorithms):
             raise ValidationError("Regression models require a finite numeric target. Choose a numeric target or classification models.")
 
 
-def start_batch(owner, dataset, config, token):
+def start_batch(owner, dataset, config, token, selected_algorithms=None):
     try:
         payload = signing.loads(token, salt=TOKEN_SALT, max_age=3600)
         batch_id = uuid.UUID(payload["id"])
@@ -150,6 +150,11 @@ def start_batch(owner, dataset, config, token):
     if active and get_batch_status(active)["active"]:
         return active
     algorithms = suitable_algorithms(config)
+    selected_keys = selected_algorithms or config.get("selected_algorithms")
+    if selected_keys and isinstance(selected_keys, list) and len(selected_keys) >= 2:
+        filtered = [a for a in algorithms if a.key in selected_keys]
+        if filtered:
+            algorithms = filtered
     _validate_target(dataset, config, algorithms)
     try:
         with transaction.atomic():

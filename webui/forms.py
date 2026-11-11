@@ -113,6 +113,7 @@ class PipelineForm(forms.Form):
 class ModelForm(forms.Form):
     algorithm = forms.ChoiceField(
         label="Algorithm",
+        required=False,
         help_text="Classification predicts categories such as yes/no. Regression predicts numeric amounts such as debt or income.",
         error_messages={
             "required": "Choose an algorithm.",
@@ -131,11 +132,61 @@ class ModelForm(forms.Form):
         ]
         self.fields["algorithm"].choices = [("", "Choose an algorithm")] + grouped
 
-    def clean_algorithm(self):
-        algorithm = self.cleaned_data["algorithm"]
-        if self.dataset is not None and self.target is not None:
-            validate_classification_target(self.dataset, self.target, algorithm)
-        return algorithm
+    def clean(self):
+        cleaned_data = super().clean()
+        if hasattr(self.data, "getlist"):
+            raw_algs = self.data.getlist("algorithms")
+        else:
+            raw_algs = self.data.get("algorithms", [])
+            if isinstance(raw_algs, str):
+                raw_algs = [raw_algs]
+        algorithms_posted = [a for a in raw_algs if isinstance(a, str) and a.strip()]
+        single_alg = (self.data.get("algorithm") or "").strip()
+
+        if algorithms_posted:
+            valid_keys = []
+            for k in algorithms_posted:
+                if k in BY_KEY:
+                    valid_keys.append(k)
+                else:
+                    self.add_error("algorithm", "Choose an algorithm from the list.")
+                    return cleaned_data
+            if not valid_keys:
+                self.add_error("algorithm", "Choose an algorithm.")
+                return cleaned_data
+
+            tasks = {BY_KEY[k].task for k in valid_keys}
+            if len(tasks) > 1:
+                self.add_error("algorithm", "Choose either classification models or regression models, but not both.")
+                return cleaned_data
+
+            if self.dataset is not None and self.target is not None:
+                for k in valid_keys:
+                    try:
+                        validate_classification_target(self.dataset, self.target, k)
+                    except forms.ValidationError as exc:
+                        self.add_error("algorithm", exc)
+                        return cleaned_data
+
+            cleaned_data["algorithms"] = valid_keys
+            cleaned_data["algorithm"] = valid_keys[0]
+            if "algorithm" in self.errors:
+                del self.errors["algorithm"]
+        elif single_alg:
+            if single_alg not in BY_KEY:
+                self.add_error("algorithm", "Choose an algorithm from the list.")
+                return cleaned_data
+            if self.dataset is not None and self.target is not None:
+                try:
+                    validate_classification_target(self.dataset, self.target, single_alg)
+                except forms.ValidationError as exc:
+                    self.add_error("algorithm", exc)
+                    return cleaned_data
+            cleaned_data["algorithm"] = single_alg
+            cleaned_data["algorithms"] = [single_alg]
+        else:
+            self.add_error("algorithm", "Choose an algorithm.")
+        return cleaned_data
 
 
 def error_summary(form):

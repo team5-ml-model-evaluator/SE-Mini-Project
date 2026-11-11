@@ -10,8 +10,22 @@
     <div><dt>Feature columns</dt><dd>{% for c in draft.feature_columns %}<span class="chip">{{ c }}</span>{% endfor %}</dd></div>
     <div><dt>Excluded columns</dt><dd>{% for c in draft.excluded_columns %}<span class="chip">{{ c }}</span>{% empty %}None{% endfor %}</dd></div>
     <div><dt>Algorithm</dt><dd>{{ algorithm.label }} ({{ algorithm.task }})</dd></div>
+    {% if selected_algorithms|length > 1 %}
+    <div><dt>Selected models</dt><dd>{% for a in selected_algorithms %}<span class="chip me-1 mb-1">{{ a.label }}</span>{% endfor %} <span class="badge bg-secondary ms-1">{{ selected_algorithms|length }} models</span></dd></div>
+    {% endif %}
   </dl>
 </section>
+
+{% if selected_algorithms|length > 1 %}
+<section class="panel" aria-labelledby="run-batch-title">
+  <h2 id="run-batch-title" class="h5">Run &amp; compare {{ selected_algorithms|length }} selected models</h2>
+  <p>Train and evaluate your <strong>{{ selected_algorithms|length }} selected models</strong> ({% for a in selected_algorithms %}{{ a.label }}{% if not forloop.last %}, {% endif %}{% endfor %}) on <strong class="mono">{{ draft.target_column }}</strong>. Models will run sequentially, and all results will appear on a unified comparison dashboard with the best model highlighted.</p>
+  <form method="post" action="{% url 'start_batch' dataset.id %}" class="mb-3">{% csrf_token %}
+    <input type="hidden" name="batch_token" value="{{ batch_token }}">
+    <button type="submit" class="btn btn-primary btn-lg">Run &amp; compare {{ selected_algorithms|length }} models</button>
+  </form>
+</section>
+{% else %}
 <form method="post" action="{% url 'start_run' dataset.id %}" class="mb-3">{% csrf_token %}
   <button type="submit" class="btn btn-primary">Start run</button>
 </form>
@@ -23,6 +37,9 @@
     <button type="submit" class="btn btn-primary">Run &amp; compare all {{ suitable_count }} models</button>
   </form>
 </section>
-<a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'pipeline_step' dataset.id %}">Change columns</a>
-<a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'model_step' dataset.id %}">Change algorithm</a>
+{% endif %}
+<div class="mt-3">
+  <a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'pipeline_step' dataset.id %}">Change columns</a>
+  <a class="btn btn-outline-secondary me-2 mb-2" href="{% url 'model_step' dataset.id %}">Change models</a>
+</div>
 {% endblock %}

@@ -4,15 +4,162 @@
 <h1>Choose an algorithm</h1>
 <p class="lede">Predicting <strong class="mono">{{ draft.target_column }}</strong> from {{ draft.feature_columns|length }} feature column{{ draft.feature_columns|length|pluralize }}.</p>
 {% include "webui/_errors.html" %}
-<form method="post" novalidate class="panel">
+
+<form method="post" novalidate class="panel" id="model-selection-form">
   {% csrf_token %}
+
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 pb-2 border-bottom">
+    <div>
+      <h2 class="h5 mb-1">Select Models to Train &amp; Compare</h2>
+      <p class="text-muted small mb-0">Choose one or more models. Selecting multiple models lets you evaluate and compare them side by side on one dashboard.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span id="selection-counter" class="badge bg-warning text-dark px-3 py-2 fs-6 fw-semibold">0 selected</span>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="btn-select-classification">Select all classification</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-clear-all">Clear</button>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h3 class="h6 text-uppercase text-muted fw-bold mb-0">Classification Models (Predicts Categories)</h3>
+    </div>
+    <div class="row g-3">
+      {% for alg in classification_algorithms %}
+      <div class="col-md-6 col-lg-4">
+        <label class="model-card h-100 {% if alg.selected %}selected{% endif %}" for="alg_{{ alg.key }}">
+          <input class="form-check-input model-checkbox" type="checkbox" name="algorithms" value="{{ alg.key }}" id="alg_{{ alg.key }}" data-task="classification" data-label="{{ alg.label }}" {% if alg.selected %}checked{% endif %}>
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="fw-bold">{{ alg.label }}</span>
+              <span class="badge bg-secondary-subtle text-secondary small">Classifier</span>
+            </div>
+            <p class="small text-muted mb-0 mt-1">{{ alg.desc }}</p>
+          </div>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h3 class="h6 text-uppercase text-muted fw-bold mb-0">Regression Models (Predicts Continuous Amounts)</h3>
+    </div>
+    <div class="row g-3">
+      {% for alg in regression_algorithms %}
+      <div class="col-md-6 col-lg-4">
+        <label class="model-card h-100 {% if alg.selected %}selected{% endif %}" for="alg_{{ alg.key }}">
+          <input class="form-check-input model-checkbox" type="checkbox" name="algorithms" value="{{ alg.key }}" id="alg_{{ alg.key }}" data-task="regression" data-label="{{ alg.label }}" {% if alg.selected %}checked{% endif %}>
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="fw-bold">{{ alg.label }}</span>
+              <span class="badge bg-secondary-subtle text-secondary small">Regressor</span>
+            </div>
+            <p class="small text-muted mb-0 mt-1">{{ alg.desc }}</p>
+          </div>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
   <div class="mb-4 target-field">
     <label class="form-label" for="{{ form.algorithm.id_for_label }}">{{ form.algorithm.label }}</label>
     {{ form.algorithm }}
     <p id="algorithm-help" class="form-text">{{ form.algorithm.help_text }}</p>
     {% if form.algorithm.errors %}<div id="{{ form.algorithm.auto_id }}_error">{% for error in form.algorithm.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>{% endif %}
   </div>
-  <button type="submit" class="btn btn-primary">Save and review settings</button>
-  <a class="btn btn-link" href="{% url 'pipeline_step' dataset.id %}">Back to pipeline</a>
+
+  <div class="d-flex align-items-center gap-3">
+    <button type="submit" class="btn btn-primary" id="save-settings-btn">Save and review settings</button>
+    <a class="btn btn-link" href="{% url 'pipeline_step' dataset.id %}">Back to pipeline</a>
+  </div>
 </form>
+
+<script>
+(function() {
+  const select = document.getElementById('id_algorithm');
+  const checkboxes = document.querySelectorAll('.model-checkbox');
+  const counter = document.getElementById('selection-counter');
+  const btnSelectClass = document.getElementById('btn-select-classification');
+  const btnClear = document.getElementById('btn-clear-all');
+
+  function updateState() {
+    const checked = Array.from(checkboxes).filter(cb => cb.checked);
+    checkboxes.forEach(cb => {
+      const card = cb.closest('.model-card');
+      if (card) {
+        if (cb.checked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      }
+    });
+
+    if (counter) {
+      if (checked.length === 0) {
+        counter.textContent = '0 selected';
+        counter.className = 'badge bg-secondary text-light px-3 py-2 fs-6';
+      } else if (checked.length === 1) {
+        counter.textContent = '1 model selected (' + checked[0].dataset.label + ')';
+        counter.className = 'badge bg-warning text-dark px-3 py-2 fs-6 fw-semibold';
+      } else {
+        counter.textContent = checked.length + ' models selected (Batch Comparison)';
+        counter.className = 'badge bg-success text-light px-3 py-2 fs-6 fw-semibold';
+      }
+    }
+
+    if (select) {
+      if (checked.length > 0) {
+        select.value = checked[0].value;
+      }
+    }
+  }
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', updateState);
+  });
+
+  if (select) {
+    select.addEventListener('change', function() {
+      if (select.value) {
+        checkboxes.forEach(cb => {
+          cb.checked = (cb.value === select.value);
+        });
+      }
+      updateState();
+    });
+  }
+
+  if (btnSelectClass) {
+    btnSelectClass.addEventListener('click', function() {
+      checkboxes.forEach(cb => {
+        cb.checked = (cb.dataset.task === 'classification');
+      });
+      updateState();
+    });
+  }
+
+  if (btnClear) {
+    btnClear.addEventListener('click', function() {
+      checkboxes.forEach(cb => { cb.checked = false; });
+      if (select) select.value = '';
+      updateState();
+    });
+  }
+
+  const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+  if (!anyChecked && select && select.value) {
+    checkboxes.forEach(cb => {
+      if (cb.value === select.value) cb.checked = true;
+    });
+  } else if (anyChecked && select && !select.value) {
+    const first = Array.from(checkboxes).find(cb => cb.checked);
+    if (first) select.value = first.value;
+  }
+  updateState();
+})();
+</script>
 {% endblock %}

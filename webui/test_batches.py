@@ -248,3 +248,22 @@ class BatchTests(WebUITestCase):
         self.assertEqual(run.state, Run.FAILED)
         self.assertIn("interrupted", run.error)
         self.assertIsNone(run.result)
+
+    def test_batch_runs_custom_selected_models(self):
+        selected = ["logistic_regression", "random_forest", "svm"]
+        model_url = reverse("model_step", args=[self.dataset.id])
+        resp = self.client.post(model_url, {"algorithms": selected})
+        self.assertRedirects(resp, self.summary_url)
+        summary_resp = self.client.get(self.summary_url)
+        self.assertContains(summary_resp, "3 models")
+        self.assertContains(summary_resp, "Logistic Regression")
+        self.assertContains(summary_resp, "Random Forest")
+        self.assertContains(summary_resp, "Support Vector Machine")
+
+        batch_resp = self.client.post(self.start_url, {"batch_token": summary_resp.context["batch_token"]})
+        self.assertEqual(batch_resp.status_code, 302)
+        batch = self.batch()
+        run_algs = list(batch.runs.values_list("run_config__algorithm", flat=True))
+        self.assertEqual(sorted(run_algs), sorted(selected))
+        self.assertEqual(batch.runs.count(), 3)
+

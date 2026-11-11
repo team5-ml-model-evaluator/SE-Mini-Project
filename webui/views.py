@@ -17,7 +17,7 @@ from .models import Dataset, Run, RunBatch
 from .reporting import build_report, comparison_csv, report_pdf, comparison_report_pdf
 from .stages import stage_list
 from .standins import runs
-from .standins.catalogue import BY_KEY
+from .standins.catalogue import ALGORITHMS, BY_KEY
 from .target_validation import validate_classification_target
 
 from .audit import record_audit
@@ -116,10 +116,46 @@ def model_step(request, pk):
                      dataset=dataset, target=draft["target_column"])
     if posted and form.is_valid():
         draft["algorithm"] = form.cleaned_data["algorithm"]
+        draft["algorithms"] = form.cleaned_data.get("algorithms", [form.cleaned_data["algorithm"]])
         request.session[_draft_key(dataset)] = draft
         return redirect("settings_summary", pk=dataset.id)
+    
+    selected_algs = set(draft.get("algorithms", [draft["algorithm"]] if "algorithm" in draft else []))
+    classification_algs = [
+        {
+            "key": a.key,
+            "label": a.label,
+            "task": a.task,
+            "desc": {
+                "logistic_regression": "Fast linear baseline · Interpretable probabilities",
+                "decision_tree": "Visual rule-based tree splits",
+                "random_forest": "Ensemble of trees · Robust against overfitting",
+                "knn": "Distance-based similarity classifier",
+                "svm": "Margin-maximizing hyperplane boundary",
+            }.get(a.key, ""),
+            "selected": a.key in selected_algs,
+        }
+        for a in ALGORITHMS if a.task == "classification"
+    ]
+    regression_algs = [
+        {
+            "key": a.key,
+            "label": a.label,
+            "task": a.task,
+            "desc": {
+                "linear_regression": "Ordinary least squares continuous baseline",
+                "decision_tree_regressor": "Non-linear segmented estimation",
+                "random_forest_regressor": "Averaged ensemble regression predictor",
+            }.get(a.key, ""),
+            "selected": a.key in selected_algs,
+        }
+        for a in ALGORITHMS if a.task == "regression"
+    ]
     return _page(
         request, "model.html", "model", dataset=dataset, draft=draft, form=form,
+        classification_algorithms=classification_algs,
+        regression_algorithms=regression_algs,
+        selected_algorithms=selected_algs,
         errors=error_summary(form) if form.errors else [],
     )
 
@@ -137,8 +173,12 @@ def settings_summary(request, pk):
 def _summary_page(request, dataset, draft):
     config = _run_config(dataset, draft)
     algorithms = batches.suitable_algorithms(config)
+    selected_keys = draft.get("algorithms", [draft["algorithm"]])
+    selected_algorithms = [BY_KEY[k] for k in selected_keys if k in BY_KEY]
     return _page(request, "summary.html", "model", dataset=dataset, draft=draft,
-                 algorithm=BY_KEY[draft["algorithm"]], suitable_count=len(algorithms),
+                 algorithm=BY_KEY[draft["algorithm"]],
+                 selected_algorithms=selected_algorithms,
+                 suitable_count=len(algorithms),
                  batch_token=batches.batch_token(request.user, dataset, config))
 
 
@@ -186,7 +226,13 @@ def start_batch(request, pk):
         messages.error(request, "Choose the target, features and algorithm before running all models.")
         return redirect("pipeline_step", pk=dataset.id)
     try:
-        batch = batches.start_batch(request.user, dataset, _run_config(dataset, draft), request.POST.get("batch_token"))
+        batch = batches.start_batch(
+            request.user,
+            dataset,
+            _run_config(dataset, draft),
+            request.POST.get("batch_token"),
+            selected_algorithms=draft.get("algorithms"),
+        )
     except ValidationError as exc:
         for message in exc.messages:
             messages.error(request, message)
