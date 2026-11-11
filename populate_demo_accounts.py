@@ -17,7 +17,7 @@ from webui.models import Dataset, Run, RunBatch
 from webui.standins.datasets import validate_csv
 from webui.standins.runs import _execute_in_worker
 
-PASSWORD = "PresentationPass123!"
+PASSWORD = "pass123"
 
 ALL_USERS = [
     {"username": "pranav", "first_name": "Pranav", "last_name": "R P", "is_admin": True},
@@ -34,44 +34,21 @@ ALL_USERS = [
     {"username": "demo", "first_name": "Demo", "last_name": "User", "is_admin": True},
 ]
 
-# Generate realistic, natural classification dataset with non-trivial boundary
+# Load realistic, natural classification dataset with non-trivial boundary
 def generate_classification_dataset():
-    np.random.seed(28)
-    n = 100
-    age = np.random.randint(21, 68, n)
-    monthly_charges = np.random.uniform(28.0, 115.0, n).round(2)
-    tenure_months = np.random.randint(1, 65, n)
-    z1 = -1.8 + (0.04 * age) + (0.038 * monthly_charges) - (0.052 * tenure_months) + np.random.normal(0, 0.85, n)
-    churn = (1 / (1 + np.exp(-z1)) > 0.5).astype(int)
-    
-    df = pd.DataFrame({
-        "age": age,
-        "monthly_charges": monthly_charges,
-        "tenure_months": tenure_months,
-        "churned": churn
-    })
-    csv_bytes = df.to_csv(index=False).encode('utf-8')
-    return "customer_churn_analysis.csv", csv_bytes, "churned", ["age", "monthly_charges", "tenure_months"]
+    p = Path("sample_datasets/customer_churn_analysis.csv")
+    csv_bytes = p.read_bytes()
+    df = pd.read_csv(p)
+    features = [c for c in df.columns if c != "churned"]
+    return "customer_churn_analysis.csv", csv_bytes, "churned", features
 
-# Generate realistic regression dataset with natural variance
+# Load realistic regression dataset with natural variance
 def generate_regression_dataset():
-    np.random.seed(42)
-    n = 100
-    sqft = np.random.randint(950, 3600, n)
-    beds = np.random.randint(1, 5, n)
-    lot_size = np.random.randint(2200, 8500, n)
-    noise_house = np.random.normal(0, 22000, n)
-    price = (sqft * 175) + (beds * 24000) + (lot_size * 14) + 35000 + noise_house
-    price = np.maximum(80000, price).round(2)
-    
-    df = pd.DataFrame({
-        "square_feet": sqft,
-        "bedrooms": beds,
-        "lot_size": lot_size,
-        "price": price
-    })
-    csv_bytes = df.to_csv(index=False).encode('utf-8')
-    return "housing_market_prices.csv", csv_bytes, "price", ["square_feet", "bedrooms", "lot_size"]
+    p = Path("sample_datasets/housing_market_prices.csv")
+    csv_bytes = p.read_bytes()
+    df = pd.read_csv(p)
+    features = [c for c in df.columns if c != "price"]
+    return "housing_market_prices.csv", csv_bytes, "price", features
 
 CLASSIFICATION_ALGOS = [
     "random_forest",

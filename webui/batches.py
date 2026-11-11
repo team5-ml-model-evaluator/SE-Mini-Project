@@ -200,12 +200,12 @@ def execute_batch(batch_id):
     try:
         RunBatch.objects.filter(pk=batch_id, active=True).update(heartbeat_at=timezone.now())
         keys = list(Run.objects.filter(batch_id=batch_id).order_by("pk").values_list("job_key", flat=True))
+        batch_delay = 0 if getattr(settings, "STANDIN_RUN_SYNC", False) else getattr(settings, "BATCH_RUN_SECONDS", 1.5)
         for key in keys:
             if not Run.objects.filter(job_key=key, state=Run.QUEUED).exists():
                 continue
             try:
-                # Batch execution uses no artificial UI demo delay.
-                runs._execute(key, queue_s=0, run_s=0)
+                runs._execute(key, queue_s=0, run_s=batch_delay)
             except Exception:
                 logger.exception("Batch model %s failed", key)
                 Run.objects.filter(job_key=key).update(state=Run.FAILED,
