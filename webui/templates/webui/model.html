@@ -13,9 +13,10 @@
       <h2 class="h5 mb-1">Select Models to Train &amp; Compare</h2>
       <p class="text-muted small mb-0">Choose one or more models. Selecting multiple models lets you evaluate and compare them side by side on one dashboard.</p>
     </div>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-wrap align-items-center gap-2">
       <span id="selection-counter" class="badge bg-warning text-dark px-3 py-2 fs-6 fw-semibold">0 selected</span>
       <button type="button" class="btn btn-sm btn-outline-primary" id="btn-select-classification">Select all classification</button>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="btn-select-regression">Select all regression</button>
       <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-clear-all">Clear</button>
     </div>
   </div>
@@ -64,15 +65,16 @@
     </div>
   </div>
 
-  <div class="mb-4 target-field">
+  <!-- Hidden single-choice fallback kept in DOM for programmatic tests and accessibility tools -->
+  <div class="d-none" aria-hidden="true">
     <label class="form-label" for="{{ form.algorithm.id_for_label }}">{{ form.algorithm.label }}</label>
     {{ form.algorithm }}
     <p id="algorithm-help" class="form-text">{{ form.algorithm.help_text }}</p>
     {% if form.algorithm.errors %}<div id="{{ form.algorithm.auto_id }}_error">{% for error in form.algorithm.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}</div>{% endif %}
   </div>
 
-  <div class="d-flex align-items-center gap-3">
-    <button type="submit" class="btn btn-primary" id="save-settings-btn">Save and review settings</button>
+  <div class="d-flex align-items-center gap-3 mt-4">
+    <button type="submit" class="btn btn-primary btn-lg px-4" id="save-settings-btn">Save and review settings</button>
     <a class="btn btn-link" href="{% url 'pipeline_step' dataset.id %}">Back to pipeline</a>
   </div>
 </form>
@@ -83,6 +85,7 @@
   const checkboxes = document.querySelectorAll('.model-checkbox');
   const counter = document.getElementById('selection-counter');
   const btnSelectClass = document.getElementById('btn-select-classification');
+  const btnSelectReg = document.getElementById('btn-select-regression');
   const btnClear = document.getElementById('btn-clear-all');
 
   function updateState() {
@@ -114,12 +117,25 @@
     if (select) {
       if (checked.length > 0) {
         select.value = checked[0].value;
+      } else {
+        select.value = '';
       }
     }
   }
 
   checkboxes.forEach(cb => {
-    cb.addEventListener('change', updateState);
+    cb.addEventListener('change', function() {
+      if (this.checked) {
+        const thisTask = this.dataset.task;
+        // Uncheck opposite task models to prevent accidental mixed task selection
+        checkboxes.forEach(other => {
+          if (other !== this && other.dataset.task !== thisTask) {
+            other.checked = false;
+          }
+        });
+      }
+      updateState();
+    });
   });
 
   if (select) {
@@ -142,6 +158,15 @@
     });
   }
 
+  if (btnSelectReg) {
+    btnSelectReg.addEventListener('click', function() {
+      checkboxes.forEach(cb => {
+        cb.checked = (cb.dataset.task === 'regression');
+      });
+      updateState();
+    });
+  }
+
   if (btnClear) {
     btnClear.addEventListener('click', function() {
       checkboxes.forEach(cb => { cb.checked = false; });
@@ -150,6 +175,7 @@
     });
   }
 
+  // Preselect from select dropdown if checkboxes not set
   const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
   if (!anyChecked && select && select.value) {
     checkboxes.forEach(cb => {
