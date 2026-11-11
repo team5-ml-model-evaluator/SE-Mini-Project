@@ -84,20 +84,80 @@ def build_comparison(selected_runs):
     if len({column["task"] for column in columns}) != 1:
         raise ValidationError("Choose runs with the same task type (classification or regression).")
     task = columns[0]["task"]
-    primary_metric = "accuracy" if task == "classification" else "rmse"
-    primary_higher = (task == "classification")
-    metric_values = [Decimal(str(run.result[primary_metric])) for run in runs]
-    best_val = max(metric_values) if primary_higher else min(metric_values)
-    best_indices = [i for i, v in enumerate(metric_values) if v == best_val]
+    if task == "classification":
+        # Multi-metric ranking: Accuracy primary -> F1-score tie-breaker -> Precision -> Recall
+        rank_tuples = [
+            (
+                Decimal(str(run.result.get("accuracy", 0))),
+                Decimal(str(run.result.get("f1_score", 0))),
+                Decimal(str(run.result.get("precision", 0))),
+                Decimal(str(run.result.get("recall", 0))),
+            )
+            for run in runs
+        ]
+        best_tuple = max(rank_tuples)
+        best_indices = [i for i, t in enumerate(rank_tuples) if t == best_tuple]
+
+        winning_run = runs[best_indices[0]]
+        best_acc = Decimal(str(winning_run.result.get("accuracy", 0)))
+        best_f1 = Decimal(str(winning_run.result.get("f1_score", 0)))
+        acc_formatted = format_metric(task, best_acc)
+        f1_formatted = format_metric(task, best_f1)
+
+        tied_on_acc = any(
+            i != best_indices[0] and Decimal(str(r.result.get("accuracy", 0))) == best_acc
+            for i, r in enumerate(runs)
+        )
+        if len(best_indices) == 1:
+            if tied_on_acc:
+                summary_text = f"highest Accuracy ({acc_formatted}) with superior F1-score ({f1_formatted})"
+            else:
+                summary_text = f"highest Accuracy ({acc_formatted}) and F1-score ({f1_formatted})"
+        else:
+            summary_text = f"joint highest Accuracy ({acc_formatted}) and F1-score ({f1_formatted})"
+
+        metric_label = "Accuracy & F1"
+        metric_formatted = f"Acc: {acc_formatted} · F1: {f1_formatted}"
+    else:
+        # Regression: lowest RMSE primary -> highest R² tie-breaker -> lowest MAE -> lowest MSE
+        rank_tuples = [
+            (
+                -Decimal(str(run.result.get("rmse", 0))),
+                Decimal(str(run.result.get("r2", 0))),
+                -Decimal(str(run.result.get("mae", 0))),
+                -Decimal(str(run.result.get("mse", 0))),
+            )
+            for run in runs
+        ]
+        best_tuple = max(rank_tuples)
+        best_indices = [i for i, t in enumerate(rank_tuples) if t == best_tuple]
+
+        winning_run = runs[best_indices[0]]
+        best_rmse = Decimal(str(winning_run.result.get("rmse", 0)))
+        best_r2 = Decimal(str(winning_run.result.get("r2", 0)))
+        rmse_formatted = format_metric(task, best_rmse)
+        r2_formatted = format_metric(task, best_r2)
+
+        tied_on_rmse = any(
+            i != best_indices[0] and Decimal(str(r.result.get("rmse", 0))) == best_rmse
+            for i, r in enumerate(runs)
+        )
+        if len(best_indices) == 1:
+            if tied_on_rmse:
+                summary_text = f"lowest RMSE ({rmse_formatted}) with superior R² ({r2_formatted})"
+            else:
+                summary_text = f"lowest RMSE ({rmse_formatted}) and highest R² ({r2_formatted})"
+        else:
+            summary_text = f"joint lowest RMSE ({rmse_formatted}) and highest R² ({r2_formatted})"
+
+        metric_label = "RMSE & R²"
+        metric_formatted = f"RMSE: {rmse_formatted} · R²: {r2_formatted}"
 
     for i, col in enumerate(columns):
         col["is_best"] = (i in best_indices)
 
     best_algorithms = [columns[i]["algorithm"].label for i in best_indices]
     best_name = ", ".join(best_algorithms)
-    metric_label = "Accuracy" if task == "classification" else "RMSE"
-    metric_formatted = format_metric(task, best_val)
-    summary_text = f"highest Accuracy ({metric_formatted})" if task == "classification" else f"lowest RMSE ({metric_formatted})"
 
     best_model_info = {
         "name": best_name,

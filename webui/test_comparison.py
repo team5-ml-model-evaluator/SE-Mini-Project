@@ -185,3 +185,15 @@ class ComparisonTests(WebUITestCase):
         self.second.result = {**CLASSIFICATION, "accuracy": 10 ** 400}
         with self.assertRaisesMessage(ValidationError, "incomplete or invalid"):
             build_comparison([self.first, self.second])
+
+    def test_tie_broken_by_f1_score_and_other_metrics(self):
+        # Two models with equal 80% accuracy, but different F1 scores
+        self.first.result = {**CLASSIFICATION, "accuracy": 0.80, "f1_score": 0.80, "precision": 0.80, "recall": 0.80}
+        self.second.result = {**CLASSIFICATION, "accuracy": 0.80, "f1_score": 0.7934, "precision": 0.8048, "recall": 0.80}
+        comp = build_comparison([self.first, self.second])
+        self.assertTrue(comp["columns"][0]["is_best"])
+        self.assertFalse(comp["columns"][1]["is_best"])
+        self.assertFalse(comp["best_model"]["is_tied"])
+        self.assertIn("Random Forest", comp["best_model"]["name"])
+        self.assertIn("superior F1-score", comp["best_model"]["summary"])
+
